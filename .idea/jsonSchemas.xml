@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="JsonSchemaMappingsProjectConfiguration">
+    <state>
+      <map>
+        <entry key="appveyor.yml">
+          <value>
+            <SchemaInfo>
+              <option name="name" value="appveyor.yml" />
+              <option name="relativePathToSchema" value="https://www.schemastore.org/appveyor.json" />
+              <option name="applicationDefined" value="true" />
+              <option name="patterns">
+                <list>
+                  <Item>
+                    <option name="path" value="config-server/src/main/resources/configurations/discovery-service.yml" />
+                  </Item>
+                </list>
+              </option>
+            </SchemaInfo>
+          </value>
+        </entry>
+      </map>
+    </state>
+  </component>
+</project>
