@@ -38,7 +38,9 @@ services:
 #      - microservices-net
 
   mongodb:
-    image: mongo
+    # Pinned to 7.0: mongo:latest refuses to start on Linux kernels >= 6.19
+    # (see MongoDB Jira SERVER-121912).
+    image: mongo:7.0
     container_name: mongo_db
     ports:
       - 27017:27017
@@ -60,7 +62,9 @@ services:
       - ME_CONFIG_MONGODB_SERVER=mongodb
       - ME_CONFIG_BASICAUTH=false
   zookeeper:
-    image: confluentinc/cp-zookeeper:latest
+    # Pinned to 7.6.1: newer cp-zookeeper/cp-kafka (v8, ':latest') are KRaft-only
+    # and crash with this ZooKeeper-based configuration.
+    image: confluentinc/cp-zookeeper:7.6.1
     container_name: zookeeper
     environment:
       ZOOKEEPER_SERVER_ID: 1
@@ -71,7 +75,7 @@ services:
     networks:
       - microservices-net
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:7.6.1
     container_name: ms_kafka
     ports:
       - "9092:9092"
