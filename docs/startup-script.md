@@ -125,8 +125,9 @@ business services**.
 ## 7. How readiness is detected
 
 * **Infrastructure containers** – TCP/command probes: `pg_isready` for
-  Postgres, `mongosh` ping for MongoDB, TCP 9092 for Kafka, TCP 1025 for
-  MailDev (`~/.mvn/...` no — see script).
+  Postgres, a `mongosh` ping for MongoDB, a TCP probe on 9092 for Kafka and on
+  1025 for MailDev. Each container is polled until its probe succeeds or
+  `INFRA_TIMEOUT` is reached.
 * **Spring services** – HTTP `GET /actuator/health` (`-f` semantics: 2xx is
   healthy; 503 while a dependency is down). The script **fails a service** if
   it does not become healthy within the configured timeout. This is a real
@@ -156,14 +157,19 @@ business services**.
 ## 9. How to start the entire system
 
 ```bash
-# 1) Optional but recommended: build everything first (see also README.md)
-./start-system.sh start --infra-only     # start only the docker infrastructure
+# Build every module first (there is no root aggregator POM — see README.md)
+for d in config-server discovery gateway customer product order payment notification; do
+  ./$d/mvnw -f $d/pom.xml clean package -DskipTests
+done
+
+# Then start the whole system (it stays in the foreground)
+./start-system.sh start
 ```
 
-Then, in a terminal, run the script (it stays in the foreground):
+To start only the Docker infrastructure and no Java services:
 
 ```bash
-./start-system.sh start
+./start-system.sh start --infra-only
 ```
 
 Expected output: a phase-by-phase log ending in a table like
@@ -278,6 +284,6 @@ bash -n start-system.sh    # syntax check
 
 ## Links
 
-* [Architecture](docs/architecture.md) · [Databases](docs/database.md) ·
-  [Testing](docs/tests.md) · [API](docs/api.md) · [Deployment](docs/deployment.md) ·
+* [Architecture](architecture.md) · [Databases](database.md) ·
+  [Testing](tests.md) · [API](api.md) · [Deployment](deployment.md) ·
   [Main README](../README.md)
