@@ -7,6 +7,7 @@ import com.ichaabane.ecommerce.payment.repository.PaymentRepository;
 import com.ichaabane.ecommerce.payment.dto.PaymentRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -16,6 +17,7 @@ public class PaymentService {
   private final PaymentMapper mapper;
   private final NotificationProducer notificationProducer;
 
+  @Transactional
   public Integer createPayment(PaymentRequest request) {
     var payment = this.repository.save(this.mapper.toPayment(request));
 
