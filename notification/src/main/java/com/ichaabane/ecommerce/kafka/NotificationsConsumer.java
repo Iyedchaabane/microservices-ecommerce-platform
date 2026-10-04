@@ -15,7 +15,6 @@ import java.time.LocalDateTime;
 
 import static com.ichaabane.ecommerce.notification.NotificationType.ORDER_CONFIRMATION;
 import static com.ichaabane.ecommerce.notification.NotificationType.PAYMENT_CONFIRMATION;
-import static java.lang.String.format;
 
 @Service
 @Slf4j
@@ -25,9 +24,9 @@ public class NotificationsConsumer {
     private final NotificationRepository repository;
     private final EmailService emailService;
 
-    @KafkaListener(topics = "payment-topic")
+    @KafkaListener(topics = "payment-topic", groupId = "paymentGroup")
     public void consumePaymentSuccessNotifications(PaymentConfirmation paymentConfirmation) throws MessagingException {
-        log.info(format("Consuming the message from payment-topic Topic:: %s", paymentConfirmation));
+        log.info("Consuming the message from payment-topic Topic:: orderReference={}", paymentConfirmation.orderReference());
         repository.save(
                 Notification.builder()
                         .type(PAYMENT_CONFIRMATION)
@@ -44,9 +43,9 @@ public class NotificationsConsumer {
         );
     }
 
-    @KafkaListener(topics = "order-topic")
+    @KafkaListener(topics = "order-topic", groupId = "orderGroup")
     public void consumeOrderConfirmationNotifications(OrderConfirmation orderConfirmation) throws MessagingException {
-        log.info(format("Consuming the message from order-topic Topic:: %s", orderConfirmation));
+        log.info("Consuming the message from order-topic Topic:: orderReference={}", orderConfirmation.orderReference());
         repository.save(
                 Notification.builder()
                         .type(ORDER_CONFIRMATION)
