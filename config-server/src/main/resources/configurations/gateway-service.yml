@@ -5,7 +5,9 @@ spring:
     gateway:
       discovery:
         locator:
-          enabled: true
+          # Auto-derived routes (/{serviceId}/**) are disabled; only the explicit,
+          # documented routes below are exposed through the gateway.
+          enabled: false
       routes:
         - id: customer-service
           uri: lb:http://CUSTOMER-SERVICE

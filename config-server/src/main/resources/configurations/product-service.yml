@@ -4,8 +4,8 @@ spring:
   datasource:
     driver-class-name: org.postgresql.Driver
     url: jdbc:postgresql://localhost:5432/product
-    username: ichaabane
-    password: ichaabane
+    username: ${POSTGRES_USER:ichaabane}
+    password: ${POSTGRES_PASSWORD:ichaabane}
   jpa:
     hibernate:
       ddl-auto: validate

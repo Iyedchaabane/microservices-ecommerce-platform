@@ -4,11 +4,14 @@ spring:
   datasource:
     driver-class-name: org.postgresql.Driver
     url: jdbc:postgresql://localhost:5432/payment
-    username: ichaabane
-    password: ichaabane
+    username: ${POSTGRES_USER:ichaabane}
+    password: ${POSTGRES_PASSWORD:ichaabane}
   jpa:
     hibernate:
-      ddl-auto: create
+      # "update" keeps the schema in sync without dropping existing data on every
+      # restart (the previous "create" value destroyed all payments at startup).
+      # The recommended target state is "validate" backed by Flyway migrations.
+      ddl-auto: update
     database: postgresql
     database-platform: org.hibernate.dialect.PostgreSQLDialect
 
