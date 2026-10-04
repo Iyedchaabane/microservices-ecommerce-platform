@@ -20,7 +20,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @NoArgsConstructor
-@Table(name = "customer_line")
+@Table(name = "order_line")
 public class OrderLine {
 
     @Id

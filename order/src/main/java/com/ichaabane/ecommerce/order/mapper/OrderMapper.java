@@ -5,17 +5,18 @@ import com.ichaabane.ecommerce.order.dto.OrderResponse;
 import com.ichaabane.ecommerce.order.model.Order;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+
 @Service
 public class OrderMapper {
 
-
-  public Order toOrder(OrderRequest request) {
+  public Order toOrder(OrderRequest request, BigDecimal totalAmount) {
     if (request == null) {
       return null;
     }
     return Order.builder()
-        .id(request.id())
         .reference(request.reference())
+        .totalAmount(totalAmount)
         .paymentMethod(request.paymentMethod())
         .customerId(request.customerId())
         .build();

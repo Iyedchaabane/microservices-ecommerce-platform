@@ -8,6 +8,8 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
@@ -30,15 +32,29 @@ public class ProductClient {
 
         HttpEntity<List<PurchaseRequest>> requestEntity = new HttpEntity<>(requestBody, headers);
         ParameterizedTypeReference<List<PurchaseResponse>> responseType = new ParameterizedTypeReference<>() {};
-        ResponseEntity<List<PurchaseResponse>> responseEntity = restTemplate.exchange(
-                productUrl + "/purchase",
-                POST,
-                requestEntity,
-                responseType
-        );
+        // RestTemplate's default error handler throws on 4xx/5xx, so errors must be
+        // handled in a catch block (checking the status code afterwards is dead code).
+        ResponseEntity<List<PurchaseResponse>> responseEntity;
+        try {
+            responseEntity = restTemplate.exchange(
+                    productUrl + "/purchase",
+                    POST,
+                    requestEntity,
+                    responseType
+            );
+        } catch (HttpStatusCodeException e) {
+            if (e.getStatusCode().is4xxClientError()) {
+                // The product service explains why the purchase was refused (unknown product, no stock...)
+                throw new BusinessException("Cannot purchase products:: " + e.getResponseBodyAsString());
+            }
+            throw new BusinessException("Product service failed to process the purchase, please try again later");
+        } catch (ResourceAccessException e) {
+            throw new BusinessException("Product service is unreachable, please try again later");
+        }
 
-        if (responseEntity.getStatusCode().isError()) {
-            throw new BusinessException("An error occurred while processing the products purchase: " + responseEntity.getStatusCode());
+        var purchased = responseEntity.getBody();
+        if (purchased == null) {
+            throw new BusinessException("Product service returned an empty purchase response");
         }
         return  responseEntity.getBody();
     }
