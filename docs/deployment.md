@@ -15,14 +15,14 @@
 
 The root `docker-compose.yml` provisions all backing services:
 
-* PostgreSQL (port 5432) – user/pass/db: `postgres`/`password`/`postgres`
-* pgAdmin (port 5050) – admin@admin.com / admin
-* MongoDB (port 27017) – user/pass: `mongo`/`mongo`
-* Mongo Express (port 8081) – admin / pass
-* Zookeeper (port 2181)
-* Kafka (port 9092) + Kafka UI (port 8080)
-* MailDev (SMTP port 1025, Web UI port 1080)
-* Zipkin (port 9411)
+* PostgreSQL (port 5432) – user/pass: `ichaabane`/`ichaabane` (override with `POSTGRES_USER` / `POSTGRES_PASSWORD`); one database per service: `product`, `order`, `payment`
+* pgAdmin (port 5050) – `pgadmin4@pgadmin.org` / `admin` (override with `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD`)
+* MongoDB (port 27017) – user/pass: `ichaabane`/`ichaabane` (override with `MONGO_USER` / `MONGO_PASSWORD`); databases `customer`, `notification`
+* Mongo Express (port 8081) – basic auth is **disabled** (`ME_CONFIG_BASICAUTH=false`); do not expose it beyond localhost
+* Zookeeper (host port 22181 → container 2181)
+* Kafka (port 9092) – single node, `PLAINTEXT`, replication factor 1
+* MailDev (SMTP port 1025, Web UI port 1080) – catches all outgoing mail locally
+* Zipkin is defined but **commented out** in `docker-compose.yml` (port 9411)
 
 ### Start infrastructure
 
@@ -130,8 +130,8 @@ docker run -p 8888:8888 --network host ecom/config-server
 
 ## Production Considerations
 
-1. **Externalize secrets**: Move DB credentials, SMTP credentials, and Kafka endpoints out of the config-server into environment variables or a secrets manager (Vault / AWS Secrets Manager).
-2. **Disable `ddl-auto=create`**: In `order-service` and `payment-service`, change `spring.jpa.hibernate.ddl-auto` to `validate` and adopt Flyway.
+1. **Externalize secrets**: DB/SMTP credentials now come from environment variables (`POSTGRES_USER`/`POSTGRES_PASSWORD`, `MONGO_USER`/`MONGO_PASSWORD`, `MAIL_USER`/`MAIL_PASSWORD`, ...) which fall back to development defaults. In production, supply these from a secrets manager (Vault / AWS Secrets Manager) instead of relying on the defaults.
+2. **Replace `ddl-auto`**: `order-service` and `payment-service` now use `update`; switch them to `validate` and adopt Flyway, as `product-service` already does.
 3. **Resource limits**: Add JVM memory limits (`-Xmx`, `-Xms`) and container resource limits.
 4. **Health checks**: Expose only `/actuator/health` externally; secure other actuator endpoints.
 5. **Kafka durability**: Set `min.insync.replicas=2` and `acks=all` on producers in production.

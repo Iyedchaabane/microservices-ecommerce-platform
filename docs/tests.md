@@ -1,6 +1,6 @@
 # Testing Strategy
 
-##Overview
+## Overview
 
 The platform follows a pragmatic testing approach:
 
@@ -16,33 +16,42 @@ Every service contains a `*ApplicationTests` class that asserts the Spring appli
 
 ### Prerequisites
 
-- Config-server must be running (or tests may fail if they eagerly load Eureka clients). For pure unit tests, this is not required.
-- Active profile: `test` (default) or `dev`.
+- There is **no Maven aggregator POM**: run the Maven wrapper from inside each
+  module directory (`./$module/mvnw -f $module/pom.xml`).
+- The `*ApplicationTests` context smoke tests boot the full Spring context and
+  therefore need `config-server` (and usually the infrastructure from
+  `docker-compose.yml`). The unit tests listed below need none of that.
+- No `test` Spring profile is configured; tests run with each module's default
+  configuration.
 
-### Run tests for a single module
+### Run the unit tests of a module (no infrastructure required)
 
 ```bash
-# From repo root
-mvn test -pl config-server
-mvn test -pl discovery
-mvn test -pl gateway
-mvn test -pl customer-service
-mvn test -pl product-service
-mvn test -pl order-service
-mvn test -pl payment-service
-mvn test -pl notification-service
+(cd product && ./mvnw -o test -Dtest='ProductServiceTest,ProductMapperTest')
+(cd order   && ./mvnw -o test -Dtest='OrderServiceTest,OrderMapperTest,OrderLineMapperTest')
 ```
 
-### Run tests for all modules
+### Run every test of one module
 
 ```bash
-mvn clean test
+# From the repository root
+./config-server/mvnw -f config-server/pom.xml test
+./customer/mvnw      -f customer/pom.xml      test
+# ... repeat for discovery, gateway, product, order, payment, notification
+```
+
+### Run every module's tests
+
+```bash
+for d in config-server discovery gateway customer product order payment notification; do
+  ./$d/mvnw -f $d/pom.xml test || exit 1
+done
 ```
 
 ### Skip tests during package
 
 ```bash
-mvn clean package -DskipTests
+./customer/mvnw -f customer/pom.xml clean package -DskipTests
 ```
 
 ---
@@ -68,18 +77,20 @@ These tests verify that:
 
 ```java
 @ExtendWith(MockitoExtension.class)
-class CustomerServiceImplTest {
+class CustomerServiceTest {
 
     @Mock CustomerRepository repository;
-    @InjectMocks CustomerServiceImpl service;
+    @Spy  CustomerMapper mapper = new CustomerMapper();
+    @InjectMocks CustomerService service;
 
     @Test
     void shouldCreateCustomer() {
-        CustomerRequest req = new CustomerRequest("John", "Doe", "john@test.com", null);
-        Customer saved = Customer.builder().id("123").firstname("John").lastname("Doe").email("john@test.com").build();
+        // CustomerCreateRequest(firstname, lastname, email, address)
+        var request = new CustomerCreateRequest("John", "Doe", "john@test.com", null);
+        var saved = Customer.builder().id("123").firstname("John").lastname("Doe").email("john@test.com").build();
         when(repository.save(any())).thenReturn(saved);
 
-        String id = service.createCustomer(req);
+        String id = service.createCustomer(request);
 
         assertEquals("123", id);
         verify(repository, times(1)).save(any());
@@ -92,7 +103,7 @@ class CustomerServiceImplTest {
 ## Integration Testing Notes
 
 * `product-service` uses **Flyway**; integration tests that hit the DB will execute migrations.
-* `order-service` and `payment-service` use `ddl-auto=create`; the schema is created automatically in H2 or PostgreSQL depending on the test profile.
+* `order-service` and `payment-service` use `ddl-auto=update`; the schema is created automatically in H2 or PostgreSQL depending on the test profile.
 * Kafka-dependent tests should use **EmbeddedKafka** (`@EmbeddedKafka`) or `spring-kafka-test`.
 
 Example embedded Kafka test:

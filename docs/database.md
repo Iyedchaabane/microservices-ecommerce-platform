@@ -39,7 +39,7 @@ The platform uses the **Database-per-Service** pattern:
 
 ### order-service
 
-*Managed by Hibernate `ddl-auto: create` (schema auto-generated).*
+*Managed by Hibernate `ddl-auto: update` (schema kept in sync at startup; `validate` backed by Flyway is the target state).*
 
 #### `customer_order`
 
@@ -51,7 +51,7 @@ The platform uses the **Database-per-Service** pattern:
 | `payment_method` | INTEGER | |
 | `customer_id` | VARCHAR | |
 
-#### `customer_line`
+#### `order_line`
 
 | Column | Type | Constraints |
 |---|---|---|
@@ -62,7 +62,7 @@ The platform uses the **Database-per-Service** pattern:
 
 ### payment-service
 
-*Managed by Hibernate `ddl-auto: create` (schema auto-generated).*
+*Managed by Hibernate `ddl-auto: update` (schema kept in sync at startup; `validate` backed by Flyway is the target state).*
 
 #### `payment`
 
@@ -79,12 +79,14 @@ The platform uses the **Database-per-Service** pattern:
 
 ### customer-service → `customer`
 
+The `email` field carries a **unique index** (declared with `@Indexed(unique = true)` on `Customer`); duplicates are rejected with `409 CONFLICT` before reaching the database.
+
 ```json
 {
   "_id": "ObjectId",
   "firstname": "String",
   "lastname": "String",
-  "email": "String",
+  "email": "String (unique)",
   "address": {
     "street": "String",
     "houseNumber": "String",
@@ -114,15 +116,13 @@ The platform uses the **Database-per-Service** pattern:
 Flyway is enabled **only** for `product-service`. Migration scripts live in:
 
 ```
-product-service/src/main/resources/db/migration/
+product/src/main/resources/db/migration/
 ```
 
 Execution order at startup:
 
-1. `V1__Create_category.sql`
-2. `V2__Create_product.sql`
-3. `V3__Insert_categories.sql`
-4. `V4__Insert_products.sql`
+1. `V1__init_database.sql` (creates the `category` and `product` tables)
+2. `V2__insert_data.sql` (seed categories and products)
 
 Flyway metadata table: `flyway_schema_history` in the `product` database.
 
@@ -134,6 +134,4 @@ Flyway metadata table: `flyway_schema_history` in the `product` database.
 
 ### Hibernate DDL-Auto (order-service, payment-service)
 
-`order-service` and `payment-service` use `spring.jpa.hibernate.ddl-auto=create`, which drops and recreates the schema on every startup. **This is intended for local development only.**
-
-For production, switch to `validate` and manage schema via Flyway (following the `product-service` pattern).
+`order-service` and `payment-service` use `spring.jpa.hibernate.ddl-auto=update`, which keeps the schema in sync without dropping existing rows. It is still not a substitute for versioned migrations: for production, switch to `validate` and manage the schema via Flyway (following the `product-service` pattern).
