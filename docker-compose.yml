@@ -29,13 +29,13 @@ services:
       - microservices-net
     restart: unless-stopped
 
-#  zipkin:
-#    container_name: zipkin
-#    image: openzipkin/zipkin
-#    ports:
-#      - "9411:9411"
-#    networks:
-#      - microservices-net
+  zipkin:
+    container_name: zipkin
+    image: openzipkin/zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - microservices-net
 
   mongodb:
     # Pinned to 7.0: mongo:latest refuses to start on Linux kernels >= 6.19
@@ -97,6 +97,20 @@ services:
     ports:
       - 1080:1080
       - 1025:1025
+  keycloak:
+    container_name: keycloak-ms
+    image: quay.io/keycloak/keycloak:24.0.2
+    ports:
+      - 9098:8080
+    environment:
+      # Development bootstrap admin (Keycloak 24 legacy env vars). Override in
+      # any shared environment; realm import/config is done via the UI in dev.
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    networks:
+      - microservices-net
+    command:
+      - "start-dev"
 
 networks:
   microservices-net:
