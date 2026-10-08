@@ -3,6 +3,9 @@ server:
 spring:
   data:
     mongodb:
+      # Required since Spring Data MongoDB 3.0 for @Indexed(unique = true) on
+      # Customer.email to actually create the index at startup.
+      auto-index-creation: true
       username: ${MONGO_USER:ichaabane}
       password: ${MONGO_PASSWORD:ichaabane}
       host: ${MONGO_HOST:localhost}

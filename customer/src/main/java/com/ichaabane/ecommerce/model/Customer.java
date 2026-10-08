@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @AllArgsConstructor
@@ -19,6 +20,9 @@ public class Customer {
   private String id;
   private String firstname;
   private String lastname;
+  // Database-level guarantee: MongoDB rejects a second document with the same
+  // email even if a concurrent request slips past the service check.
+  @Indexed(unique = true)
   private String email;
   private Address address;
 }

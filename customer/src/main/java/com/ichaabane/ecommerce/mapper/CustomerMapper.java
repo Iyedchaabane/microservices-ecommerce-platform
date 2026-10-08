@@ -1,6 +1,6 @@
 package com.ichaabane.ecommerce.mapper;
 
-import com.ichaabane.ecommerce.dto.request.CustomerRequest;
+import com.ichaabane.ecommerce.dto.request.CustomerCreateRequest;
 import com.ichaabane.ecommerce.dto.response.CustomerResponse;
 import com.ichaabane.ecommerce.model.Customer;
 import org.springframework.stereotype.Component;
@@ -8,12 +8,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class CustomerMapper {
 
-  public Customer toCustomer(CustomerRequest request) {
+  /**
+   * Maps a create request to a new entity. The identifier is intentionally never
+   * set here: the create request carries no id and MongoDB generates one.
+   */
+  public Customer toCustomer(CustomerCreateRequest request) {
     if (request == null) {
       return null;
     }
     return Customer.builder()
-        .id(request.id())
         .firstname(request.firstname())
         .lastname(request.lastname())
         .email(request.email())
