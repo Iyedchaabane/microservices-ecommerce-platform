@@ -2,6 +2,7 @@ package com.ichaabane.gateway.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
@@ -19,7 +20,9 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
  *
  * <p>All five documented routes ({@code /api/v1/customers|products|orders|
  * order-lines|payments/**}) require authentication; there are deliberately no
- * public business routes. Role/authority mapping is not configured yet: any
+ * public business routes. {@code /actuator/health} is public so readiness
+ * probes and the startup script can poll it without a Bearer token; every
+ * other actuator endpoint stays authenticated. Role/authority mapping is not configured yet: any
  * valid, unexpired token from the realm is accepted (authentication only, no
  * authorization). Scope-based and role-based restrictions can be added here
  * per route when needed.</p>
@@ -33,14 +36,14 @@ public class GatewaySecurityConfig {
     http
         .csrf(ServerHttpSecurity.CsrfSpec::disable)
         .authorizeExchange(exchange -> exchange
-            .anyExchange().authenticated()
+            .pathMatchers("/eureka/**")
+            .permitAll()
+            .pathMatchers("/actuator/health", "/actuator/health/**")
+            .permitAll()
+            .anyExchange()
+            .authenticated()
         )
-        .oauth2ResourceServer(oauth2 -> oauth2
-            .jwt(jwt -> {
-              // issuer-uri from application.yml; JWKS URI is discovered from the
-              // issuer's OIDC metadata by Spring Security — no custom decoder.
-            })
-        );
+        .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
     return http.build();
   }
 }

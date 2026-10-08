@@ -132,6 +132,25 @@ class GatewaySecurityConfigTest {
         }
     }
 
+    // --- Actuator health (public readiness probe) ------------------------------
+
+    @Test
+    @DisplayName("/actuator/health is public (no token needed) — start-system.sh polls it")
+    void actuatorHealthIsPublic() {
+        client.get().uri("/actuator/health")
+            .exchange()
+            // Spring Boot Actuator returns 200 UP when the app context is healthy.
+            .expectStatus().isOk();
+    }
+
+    @Test
+    @DisplayName("/actuator (discovery) stays authenticated (health only is public)")
+    void otherActuatorEndpointsStayProtected() {
+        client.get().uri("/actuator")
+            .exchange()
+            .expectStatus().isUnauthorized();
+    }
+
     // --- Valid-token pass-through ----------------------------------------------
 
     @Test
