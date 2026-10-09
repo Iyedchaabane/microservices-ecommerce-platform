@@ -10,3 +10,20 @@ spring:
     import: optional:configserver:http://localhost:8888
   application:
     name: gateway-service
+
+# Per-client-IP rate limiting on business routes (RateLimitWebFilter).
+# burst 60, +20 tokens/10s ≈ sustained 2 req/s per IP; /actuator/health and
+# /eureka/** are exempt (readiness probes / registry traffic).
+rate-limit:
+  capacity: ${RATE_LIMIT_CAPACITY:60}
+  refill: ${RATE_LIMIT_REFILL:20}
+  interval-seconds: ${RATE_LIMIT_INTERVAL_SECONDS:10}
+  # Buckets idle longer than this are dropped by a background janitor (memory bound).
+  eviction-seconds: ${RATE_LIMIT_EVICTION_SECONDS:600}
+  # Max client buckets retained in memory under high-cardinality traffic.
+  max-buckets: ${RATE_LIMIT_MAX_BUCKETS:50000}
+  # X-Forwarded-For is honoured only when the peer is listed in trusted-proxies.
+  trust-forwarded-headers: ${RATE_LIMIT_TRUST_FORWARDED:false}
+  trusted-proxies: ${RATE_LIMIT_TRUSTED_PROXIES:}
+  # Internal services call the gateway over loopback; exempt them only if desired.
+  exempt-loopback: ${RATE_LIMIT_EXEMPT_LOOPBACK:false}
