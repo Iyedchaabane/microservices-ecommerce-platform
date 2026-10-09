@@ -1,3 +1,4 @@
 # Runtime artifacts created by start-system.sh
 .run/
 security-docs/
+requests.http
