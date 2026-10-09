@@ -27,7 +27,7 @@ configuration and asynchronous Kafka messaging.
 11. [Testing](#testing)
 12. [API documentation](#api-documentation)
 13. [Kafka events](#kafka-events)
-14. [Authentication & Security](#authentication--security)
+14. [Authentication, Rate Limiting & Security](#authentication--security)
 15. [Troubleshooting](#troubleshooting)
 16. [Useful commands](#useful-commands)
 17. [Known limitations](#known-limitations)
@@ -45,7 +45,8 @@ architecture rather than a single deployed product:
 
 * **Service discovery** — Netflix Eureka, so services find each other by name.
 * **API gateway** — Spring Cloud Gateway as the single entry point (`:8222`),
-  validating Keycloak-issued JWTs (OAuth2 resource server).
+  validating Keycloak-issued JWTs (OAuth2 resource server) and applying
+  per-client-IP edge rate limiting.
 * **Externalized configuration** — Spring Cloud Config Server (native profile).
 * **Synchronous calls** — OpenFeign + Spring Cloud LoadBalancer between services.
 * **Asynchronous events** — Apache Kafka for order/payment notifications.
@@ -141,7 +142,7 @@ the business services can all boot in parallel (see [Startup order](#startup-ord
 | Cloud | Spring Cloud | 2023.0.1 |
 | Build | Maven (wrapper per module) | 3.8.x / 3.9.x |
 | Service discovery | Netflix Eureka (Spring Cloud Netflix) | — |
-| API gateway | Spring Cloud Gateway | — |
+| API gateway | Spring Cloud Gateway (with edge rate limiting) | — |
 | Config | Spring Cloud Config Server (native) | — |
 | Sync calls | OpenFeign, Spring Cloud LoadBalancer | — |
 | Messaging | Apache Kafka (Confluent images) | 7.6.1 |
@@ -242,6 +243,8 @@ variables / a secrets manager before deploying — see `docs/deployment.md`.
 | `KAFKA_BOOTSTRAP_SERVERS` | notification-service (consumer) | Default `localhost:9092` |
 | `MAIL_HOST` / `MAIL_USER` / `MAIL_PASSWORD` / `MAIL_FROM` | notification-service | SMTP endpoint and sender address (default sender `no-reply@ecommerce.local`) |
 | `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` | docker-compose (pgAdmin) | pgAdmin login — see `docker-compose.yml` |
+| `RATE_LIMIT_CAPACITY` / `RATE_LIMIT_REFILL` / `RATE_LIMIT_INTERVAL_SECONDS` / `RATE_LIMIT_EVICTION_SECONDS` / `RATE_LIMIT_MAX_BUCKETS` | gateway | Edge rate-limiting tuning — see [docs/security/rate-limiting.md](docs/security/rate-limiting.md) §4 |
+| `RATE_LIMIT_TRUST_FORWARDED` / `RATE_LIMIT_TRUSTED_PROXIES` / `RATE_LIMIT_EXEMPT_LOOPBACK` | gateway | Rate-limiting trusted-proxy handling and loopback exemption — see [docs/security/rate-limiting.md](docs/security/rate-limiting.md) §4 |
 
 `start-system.sh` additionally honors `LOG_DIR`, `PID_DIR`, `INFRA_TIMEOUT`,
 `CONFIG_TIMEOUT`, `DISCOVERY_TIMEOUT`, `SERVICE_TIMEOUT`, `POLL_INTERVAL`,
@@ -455,9 +458,11 @@ The unit tests are plain Mockito tests and need no infrastructure:
 (cd payment && ./mvnw -o test -Dtest='PaymentServiceTest,PaymentMapperTest')
 ```
 
-**Current status: 48 tests across the 8 modules — all passing on JDK 21**
-(order 11, product 21, payment 6, customer 4, notification 3, plus one context
-test each in config-server/discovery/gateway), including regression tests for
+**Current status: 95 tests across the 8 modules — all passing on JDK 21**
+(order 11, product 21, payment 6, customer 4, notification 3, gateway 48
+(including 37 edge-rate-limiting tests — algorithm, client identification,
+configuration validation and full-context HTTP contract), plus one context
+test each in config-server/discovery), including regression tests for
 every fix listed in [docs/final-code-review.md](docs/final-code-review.md).
 
 Context tests load the full Spring context and expect the local Docker
@@ -522,7 +527,7 @@ Details:
 
 ---
 
-## Authentication & Security
+## Authentication, Rate Limiting & Security
 
 ### Architecture
 
@@ -612,6 +617,28 @@ curl -H "Authorization: Bearer <ACCESS_TOKEN>" \
      http://localhost:8222/api/v1/customers
 ```
 
+### Rate limiting
+
+The gateway applies **per-client-IP edge rate limiting** on the business
+routes, **before** authentication: a burst of 60 requests per client IP,
+refilled by 20 tokens every 10 seconds (≈ 2 req/s sustained), all tunable via
+the `RATE_LIMIT_*` environment variables.
+
+* Exempt: `/actuator/health(/**)` (readiness probes must never be throttled)
+  and `/eureka/**` (registry traffic).
+* **`X-Forwarded-For` is ignored by default** — a rotating spoofed header
+cannot buy extra requests. Honour it only from explicitly trusted proxies:
+  `RATE_LIMIT_TRUST_FORWARDED=true` + `RATE_LIMIT_TRUSTED_PROXIES=<proxy-ips>`.
+* Exceeding the limit returns **429 Too Many Requests** with a numeric
+  `Retry-After` header (seconds until a token is available) and a fixed,
+  detail-free JSON body — the request never reaches authentication, routing
+  or the services.
+* State is in-memory per gateway instance; loopback callers share one bucket
+  in this host-based deployment (`RATE_LIMIT_EXEMPT_LOOPBACK=true` exempts
+  loopback peers, opt-in).
+
+Full details: [docs/security/rate-limiting.md](docs/security/rate-limiting.md).
+
 ### Security behavior
 
 | Request | Result |
@@ -621,6 +648,7 @@ curl -H "Authorization: Bearer <ACCESS_TOKEN>" \
 | Invalid/expired/wrong-issuer token | **401 Unauthorized** |
 | Valid token | request is forwarded to the target service |
 | Insufficient role | **n/a yet** (no role checks configured; would be 403) |
+| Rate limit exceeded (same client IP) | **429 Too Many Requests** + `Retry-After` (before authentication) |
 
 Other verified controls:
 
@@ -634,6 +662,8 @@ Other verified controls:
   payloads via `@ControllerAdvice`.
 * **Kafka safety.** JSON deserialization restricted to trusted event packages.
 * **Gateway surface.** Only the five explicit route patterns are exposed.
+* **Edge rate limiting.** Per-client-IP token bucket applied before
+  authentication; see [docs/security/rate-limiting.md](docs/security/rate-limiting.md).
 * **Credentials.** Dev defaults with env-var overrides; never reuse in a real
   environment.
 
@@ -649,6 +679,7 @@ Other verified controls:
 | Service starts but has no port / no datasource | It could not reach the config-server — start/repair `config-server` and restart the service |
 | Eureka dashboard empty | Wait 30–60s; ensure `discovery` was started before the clients |
 | `/actuator/health` returns 503 | A backing store is down (Postgres, Mongo, Kafka or SMTP). Check `docker compose ps` |
+| Requests fail with `429 Too Many Requests` | Edge rate limiter engaged for your client IP — wait for the `Retry-After` duration; behind a reverse proxy, configure `RATE_LIMIT_TRUST_FORWARDED` + `RATE_LIMIT_TRUSTED_PROXIES` (see [docs/security/rate-limiting.md](docs/security/rate-limiting.md) §11) |
 | Port already in use | Something is already bound (e.g. Eureka's 8761). Stop it — `ss -ltnp \| grep :8761` |
 | Kafka consumer receives nothing | Ensure Kafka is up on `localhost:9092` and the topic exists; consumers use `auto-offset-reset: earliest` |
 | MailDev shows no email | Notification mail points at `localhost:1025`; the MailDev web UI is on <http://localhost:1080> |
@@ -751,6 +782,7 @@ docker compose down -v                # DESTRUCTIVE: delete all data volumes
 | [docs/api.md](docs/api.md) | REST endpoint reference with request/response examples |
 | [docs/tests.md](docs/tests.md) | Testing strategy and examples |
 | [docs/security/keycloak.md](docs/security/keycloak.md) | Keycloak authentication: architecture, configuration, flows, troubleshooting |
+| [docs/security/rate-limiting.md](docs/security/rate-limiting.md) | Edge rate limiting: algorithm, configuration, client identification, HTTP contract, troubleshooting |
 | [docs/deployment.md](docs/deployment.md) | Infrastructure setup, build/run, production considerations |
 | [docs/final-code-review.md](docs/final-code-review.md) | Verified findings, security posture, remaining risks, test results |
 
