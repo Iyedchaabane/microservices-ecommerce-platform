@@ -2,6 +2,7 @@ package com.ichaabane.ecommerce.dto.request;
 
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import jakarta.validation.ValidatorFactory;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,8 @@ class ProductRequestValidationTest {
 
     @BeforeAll
     static void setUpValidator() {
-        validator = Validation.buildDefaultValidatorFactory().getValidator();
+        ValidatorFactory factory = Validation.buildDefaultValidatorFactory();
+        validator = factory.getValidator();
     }
 
     private Set<String> violatedFields(ProductRequest request) {
@@ -38,6 +40,92 @@ class ProductRequestValidationTest {
     }
 
     @Test
+    @DisplayName("Should reject a null available quantity (boxed Integer must not fall through to the primitive int entity field)")
+    void shouldRejectNullQuantity() {
+        assertTrue(violatedFields(new ProductRequest("Book", "d", null, BigDecimal.ONE, 1))
+                .contains("availableQuantity"));
+    }
+
+    @Test
+    @DisplayName("Should accept a positive available quantity")
+    void shouldAcceptPositiveQuantity() {
+        assertTrue(validator.validate(
+                new ProductRequest("Book", "A book", 7, BigDecimal.ONE, 1)).isEmpty());
+    }
+
+    @Test
+    @DisplayName("Should accept the maximum int quantity without overflow at the DTO edge")
+    void shouldAcceptMaxIntQuantity() {
+        assertTrue(validator.validate(
+                new ProductRequest("Book", "A book", Integer.MAX_VALUE, BigDecimal.ONE, 1)).isEmpty());
+    }
+
+    @Test
+    @DisplayName("Should accept a zero available quantity (registered product awaiting restock)")
+    void shouldAcceptZeroQuantity() {
+        assertTrue(validator.validate(
+                new ProductRequest("Book", "A book", 0, BigDecimal.ONE, 1)).isEmpty());
+    }
+
+    @Test
+    @DisplayName("Should reject a negative quantity")
+    void shouldRejectNegativeQuantity() {
+        assertTrue(violatedFields(new ProductRequest("Book", "d", -3, BigDecimal.ONE, 1))
+                .contains("availableQuantity"));
+    }
+
+    @Test
+    @DisplayName("Should accept Integer.MIN_VALUE-typed input only via the negative rule")
+    void shouldRejectMostNegativeIntegerQuantity() {
+        assertTrue(violatedFields(new ProductRequest("Book", "d", Integer.MIN_VALUE, BigDecimal.ONE, 1))
+                .contains("availableQuantity"));
+    }
+
+    @Test
+    @DisplayName("Should reject a zero price (strictly positive pricing preserved)")
+    void shouldRejectZeroPrice() {
+        assertTrue(violatedFields(new ProductRequest("Book", "d", 10, BigDecimal.ZERO, 1)).contains("price"));
+    }
+
+    @Test
+    @DisplayName("Should reject a negative price")
+    void shouldRejectNegativePrice() {
+        assertTrue(violatedFields(new ProductRequest("Book", "d", 10, BigDecimal.valueOf(-1), 1)).contains("price"));
+    }
+
+    @Test
+    @DisplayName("Should reject a null price")
+    void shouldRejectNullPrice() {
+        assertTrue(violatedFields(new ProductRequest("Book", "d", 10, null, 1)).contains("price"));
+    }
+
+    @Test
+    @DisplayName("Should reject an extremely small non-positive price")
+    void shouldRejectTinyFractionalNegativePrice() {
+        assertTrue(violatedFields(new ProductRequest("Book", "d", 10, BigDecimal.valueOf(-0.01), 1)).contains("price"));
+    }
+
+    @Test
+    @DisplayName("Should accept a one-cent price as the lower valid bound")
+    void shouldAcceptOneCentPrice() {
+        assertTrue(validator.validate(
+                new ProductRequest("Book", "A book", 10, BigDecimal.valueOf(0.01), 1)).isEmpty());
+    }
+
+    @Test
+    @DisplayName("Should reject a null category id")
+    void shouldRejectNullCategory() {
+        assertTrue(violatedFields(new ProductRequest("Book", "d", 10, BigDecimal.ONE, null)).contains("categoryId"));
+    }
+
+    @Test
+    @DisplayName("Should accept a negative category id at the DTO edge (existence is the service's 404 check)")
+    void shouldNotConstraintCategorySignAtDtoLayer() {
+        assertTrue(validator.validate(
+                new ProductRequest("Book", "A book", 10, BigDecimal.ONE, -1)).isEmpty());
+    }
+
+    @Test
     @DisplayName("Should reject a null name")
     void shouldRejectNullName() {
         assertTrue(violatedFields(new ProductRequest(null, "d", 10, BigDecimal.ONE, 1)).contains("name"));
@@ -47,6 +135,12 @@ class ProductRequestValidationTest {
     @DisplayName("Should reject a blank name")
     void shouldRejectBlankName() {
         assertTrue(violatedFields(new ProductRequest("  ", "d", 10, BigDecimal.ONE, 1)).contains("name"));
+    }
+
+    @Test
+    @DisplayName("Should reject a name over 255 chars")
+    void shouldRejectTooLongName() {
+        assertTrue(violatedFields(new ProductRequest("x".repeat(256), "d", 10, BigDecimal.ONE, 1)).contains("name"));
     }
 
     @Test
@@ -62,51 +156,9 @@ class ProductRequestValidationTest {
     }
 
     @Test
-    @DisplayName("Should reject a zero quantity")
-    void shouldRejectZeroQuantity() {
-        assertTrue(violatedFields(new ProductRequest("Book", "d", 0, BigDecimal.ONE, 1)).contains("availableQuantity"));
-    }
-
-    @Test
-    @DisplayName("Should reject a negative quantity")
-    void shouldRejectNegativeQuantity() {
-        assertTrue(violatedFields(new ProductRequest("Book", "d", -3, BigDecimal.ONE, 1)).contains("availableQuantity"));
-    }
-
-    @Test
-    @DisplayName("Should reject a NaN quantity as not positive")
-    void shouldRejectNaNQuantity() {
-        assertTrue(violatedFields(new ProductRequest("Book", "d", Double.NaN, BigDecimal.ONE, 1)).contains("availableQuantity"));
-    }
-
-    @Test
-    @DisplayName("Should reject a zero price")
-    void shouldRejectZeroPrice() {
-        assertTrue(violatedFields(new ProductRequest("Book", "d", 10, BigDecimal.ZERO, 1)).contains("price"));
-    }
-
-    @Test
-    @DisplayName("Should reject a negative price")
-    void shouldRejectNegativePrice() {
-        assertTrue(violatedFields(new ProductRequest("Book", "d", 10, BigDecimal.valueOf(-1), 1)).contains("price"));
-    }
-
-    @Test
-    @DisplayName("Should accept a null price because there is no @NotNull on price")
-    void shouldAcceptNullPrice() {
-        assertTrue(validator.validate(new ProductRequest("Book", "d", 10, null, 1)).isEmpty());
-    }
-
-    @Test
-    @DisplayName("Should reject a null category id")
-    void shouldRejectNullCategory() {
-        assertTrue(violatedFields(new ProductRequest("Book", "d", 10, BigDecimal.ONE, null)).contains("categoryId"));
-    }
-
-    @Test
     @DisplayName("Should report one violation per invalid field")
     void shouldReportAllInvalidFields() {
-        Set<?> violations = validator.validate(new ProductRequest(null, null, 0, BigDecimal.valueOf(-1), null));
+        Set<?> violations = validator.validate(new ProductRequest(null, null, -1, BigDecimal.valueOf(-1), null));
         assertEquals(5, violations.size());
         assertFalse(violations.isEmpty());
     }

@@ -42,10 +42,10 @@ class ProductModelTest {
             var product = new Product();
 
             assertNull(product.getId());
-            product.setAvailableQuantity(4.5);
+            product.setAvailableQuantity(4);
             product.setName("Pen");
 
-            assertEquals(4.5, product.getAvailableQuantity());
+            assertEquals(4, product.getAvailableQuantity());
             assertEquals("Pen", product.getName());
         }
 
