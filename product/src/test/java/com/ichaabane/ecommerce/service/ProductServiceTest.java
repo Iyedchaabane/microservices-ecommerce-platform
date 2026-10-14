@@ -2,9 +2,11 @@ package com.ichaabane.ecommerce.service;
 
 import com.ichaabane.ecommerce.dto.request.ProductPurchaseRequest;
 import com.ichaabane.ecommerce.dto.request.ProductRequest;
+import com.ichaabane.ecommerce.dto.response.PageResponse;
 import com.ichaabane.ecommerce.dto.response.ProductPurchaseResponse;
 import com.ichaabane.ecommerce.dto.response.ProductResponse;
 import com.ichaabane.ecommerce.exception.ProductPurchaseException;
+import com.ichaabane.ecommerce.exception.ResourceNotFoundException;
 import com.ichaabane.ecommerce.mapper.ProductMapper;
 import com.ichaabane.ecommerce.model.Category;
 import com.ichaabane.ecommerce.model.Product;
@@ -26,6 +28,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -59,7 +62,7 @@ class ProductServiceTest {
         category = Category.builder().id(1).name("Books").description("Books category").build();
     }
 
-    private Product product(int id, String name, double quantity, double price) {
+    private Product product(int id, String name, int quantity, double price) {
         return Product.builder()
                 .id(id)
                 .name(name)
@@ -95,12 +98,12 @@ class ProductServiceTest {
         }
 
         @Test
-        @DisplayName("Should reject an unknown category and not persist anything")
+        @DisplayName("Should reject an unknown category with a 404 signal and not persist anything")
         void shouldRejectUnknownCategory() {
             var request = new ProductRequest("Book", "A book", 10, BigDecimal.valueOf(15), 99);
             when(categoryRepository.findById(99)).thenReturn(Optional.empty());
 
-            assertThrows(EntityNotFoundException.class, () -> service.createProduct(request));
+            assertThrows(ResourceNotFoundException.class, () -> service.createProduct(request));
 
             verify(repository, never()).save(any(Product.class));
         }
@@ -123,26 +126,31 @@ class ProductServiceTest {
         }
 
         @Test
-        @DisplayName("Should throw when the product does not exist")
+        @DisplayName("Should throw a 404-signal exception when the product does not exist")
         void shouldThrowWhenNotFound() {
             when(repository.findById(99)).thenReturn(Optional.empty());
 
-            assertThrows(EntityNotFoundException.class, () -> service.findById(99));
+            assertThrows(ResourceNotFoundException.class, () -> service.findById(99));
         }
 
         @Test
-        @DisplayName("Should map every product of the catalogue")
+        @DisplayName("Should map every product of the requested page")
         void shouldReturnAllProducts() {
-            when(repository.findAll()).thenReturn(List.of(
-                    product(1, "Book", 10, 15),
-                    product(2, "Pen", 5, 2)
-            ));
+            when(repository.findAll(org.springframework.data.domain.PageRequest.of(0, 20,
+                    org.springframework.data.domain.Sort.by(
+                            org.springframework.data.domain.Sort.Direction.ASC, "id"))))
+                    .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(
+                            product(1, "Book", 10, 15),
+                            product(2, "Pen", 5, 2)
+                    )));
 
-            List<ProductResponse> products = service.findAll();
+            PageResponse<ProductResponse> response = service.findAll(0, 20, null, null);
 
-            assertEquals(2, products.size());
-            assertEquals("Book", products.get(0).name());
-            assertEquals("Pen", products.get(1).name());
+            assertEquals(2, response.content().size());
+            assertEquals("Book", response.content().get(0).name());
+            assertEquals("Pen", response.content().get(1).name());
+            assertEquals(2, response.totalElements());
+            assertTrue(response.last());
         }
     }
 
@@ -260,9 +268,19 @@ class ProductServiceTest {
         }
 
         @Test
-        @DisplayName("Should reject a NaN quantity")
-        void shouldRejectNaNQuantity() {
-            var request = List.of(new ProductPurchaseRequest(1, Double.NaN));
+        @DisplayName("Should reject a null quantity")
+        void shouldRejectNullQuantity() {
+            var request = List.of(new ProductPurchaseRequest(1, null));
+
+            assertThrows(ProductPurchaseException.class, () -> service.purchaseProducts(request));
+
+            verifyNoInteractions(repository);
+        }
+
+        @Test
+        @DisplayName("Should reject a product id that cannot exist")
+        void shouldRejectNegativeProductId() {
+            var request = List.of(new ProductPurchaseRequest(-1, 1));
 
             assertThrows(ProductPurchaseException.class, () -> service.purchaseProducts(request));
 

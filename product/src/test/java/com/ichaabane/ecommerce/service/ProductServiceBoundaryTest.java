@@ -4,12 +4,12 @@ import com.ichaabane.ecommerce.dto.request.ProductPurchaseRequest;
 import com.ichaabane.ecommerce.dto.request.ProductRequest;
 import com.ichaabane.ecommerce.dto.response.ProductResponse;
 import com.ichaabane.ecommerce.exception.ProductPurchaseException;
+import com.ichaabane.ecommerce.exception.ResourceNotFoundException;
 import com.ichaabane.ecommerce.mapper.ProductMapper;
 import com.ichaabane.ecommerce.model.Category;
 import com.ichaabane.ecommerce.model.Product;
 import com.ichaabane.ecommerce.repository.CategoryRepository;
 import com.ichaabane.ecommerce.repository.ProductRepository;
-import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -23,8 +23,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -36,6 +36,7 @@ class ProductServiceBoundaryTest {
 
     @Mock
     private ProductRepository repository;
+
     @Mock
     private CategoryRepository categoryRepository;
 
@@ -50,7 +51,7 @@ class ProductServiceBoundaryTest {
         category = Category.builder().id(1).name("Books").description("Books category").build();
     }
 
-    private Product product(int id, double quantity) {
+    private Product product(int id, int quantity) {
         return Product.builder()
                 .id(id).name("P" + id).description("d").availableQuantity(quantity)
                 .price(BigDecimal.valueOf(10)).category(category)
@@ -74,14 +75,14 @@ class ProductServiceBoundaryTest {
         }
 
         @Test
-        @DisplayName("Should decrement by a fractional quantity")
-        void shouldSupportFractionalQuantity() {
-            var book = product(1, 5.5);
+        @DisplayName("Should decrement by a large whole-unit quantity")
+        void shouldSupportLargeQuantity() {
+            var book = product(1, 1_000_000);
             when(repository.findAllByIdInOrderById(List.of(1))).thenReturn(List.of(book));
 
-            service.purchaseProducts(List.of(new ProductPurchaseRequest(1, 2.5)));
+            service.purchaseProducts(List.of(new ProductPurchaseRequest(1, 250_000)));
 
-            assertEquals(3.0, book.getAvailableQuantity());
+            assertEquals(750_000, book.getAvailableQuantity());
         }
 
         @Test
@@ -89,7 +90,7 @@ class ProductServiceBoundaryTest {
         void shouldRefuseWhenStockIsZero() {
             when(repository.findAllByIdInOrderById(List.of(1))).thenReturn(List.of(product(1, 0)));
 
-            var exception = org.junit.jupiter.api.Assertions.assertThrows(ProductPurchaseException.class,
+            var exception = assertThrows(ProductPurchaseException.class,
                     () -> service.purchaseProducts(List.of(new ProductPurchaseRequest(1, 1))));
 
             assertEquals("Insufficient stock quantity for product with ID:: 1", exception.getMessage());
@@ -113,11 +114,23 @@ class ProductServiceBoundaryTest {
         }
 
         @Test
+        @DisplayName("Should throw ArithmeticException when merged duplicate quantities overflow int")
+        void shouldThrowOnQuantityMergeOverflow() {
+            var exception = assertThrows(ArithmeticException.class,
+                    () -> service.purchaseProducts(List.of(
+                            new ProductPurchaseRequest(1, Integer.MAX_VALUE),
+                            new ProductPurchaseRequest(1, 1))));
+
+            assertTrue(exception.getMessage().toLowerCase().contains("overflow"));
+            verify(repository, never()).save(org.mockito.ArgumentMatchers.any(Product.class));
+        }
+
+        @Test
         @DisplayName("Should explain an unknown product")
         void shouldExplainUnknownProduct() {
             when(repository.findAllByIdInOrderById(List.of(1, 2))).thenReturn(List.of(product(1, 5)));
 
-            var exception = org.junit.jupiter.api.Assertions.assertThrows(ProductPurchaseException.class,
+            var exception = assertThrows(ProductPurchaseException.class,
                     () -> service.purchaseProducts(List.of(
                             new ProductPurchaseRequest(1, 1),
                             new ProductPurchaseRequest(2, 1))));
@@ -148,7 +161,7 @@ class ProductServiceBoundaryTest {
         void shouldExplainUnknownCategory() {
             when(categoryRepository.findById(99)).thenReturn(Optional.empty());
 
-            var exception = org.junit.jupiter.api.Assertions.assertThrows(EntityNotFoundException.class,
+            var exception = assertThrows(ResourceNotFoundException.class,
                     () -> service.createProduct(new ProductRequest("Book", "d", 1, BigDecimal.ONE, 99)));
 
             assertTrue(exception.getMessage().contains("Category not found with ID:: 99"));
@@ -160,26 +173,37 @@ class ProductServiceBoundaryTest {
         void shouldExplainUnknownProductOnFindById() {
             when(repository.findById(99)).thenReturn(Optional.empty());
 
-            var exception = org.junit.jupiter.api.Assertions.assertThrows(EntityNotFoundException.class,
+            var exception = assertThrows(ResourceNotFoundException.class,
                     () -> service.findById(99));
 
             assertTrue(exception.getMessage().contains("Product not found with ID:: 99"));
         }
 
         @Test
-        @DisplayName("Should return an empty list for an empty catalogue")
+        @DisplayName("Should return an empty page for an empty catalogue")
         void shouldReturnEmptyCatalogue() {
-            when(repository.findAll()).thenReturn(List.of());
+            when(repository.findAll(org.springframework.data.domain.PageRequest.of(0, 20,
+                    org.springframework.data.domain.Sort.by(
+                            org.springframework.data.domain.Sort.Direction.ASC, "id"))))
+                    .thenReturn(org.springframework.data.domain.Page.empty());
 
-            assertTrue(service.findAll().isEmpty());
+            var response = service.findAll(0, 20, null, null);
+
+            assertTrue(response.content().isEmpty());
+            assertEquals(0, response.totalElements());
+            assertTrue(response.last());
         }
 
         @Test
         @DisplayName("Should map every product of a multi-entry catalogue")
         void shouldMapEveryProduct() {
-            when(repository.findAll()).thenReturn(List.of(product(1, 3), product(2, 4), product(3, 5)));
+            when(repository.findAll(org.springframework.data.domain.PageRequest.of(0, 20,
+                    org.springframework.data.domain.Sort.by(
+                            org.springframework.data.domain.Sort.Direction.ASC, "id"))))
+                    .thenReturn(new org.springframework.data.domain.PageImpl<>(
+                            List.of(product(1, 3), product(2, 4), product(3, 5))));
 
-            List<ProductResponse> result = service.findAll();
+            List<ProductResponse> result = service.findAll(0, 20, null, null).content();
 
             assertEquals(3, result.size());
             assertEquals("P1", result.get(0).name());
