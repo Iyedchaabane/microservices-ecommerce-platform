@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.BeanPropertyBindingResult;
+import org.springframework.validation.FieldError;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
 import java.util.Map;
@@ -120,6 +122,42 @@ class GlobalExceptionHandlerTest {
                     new BeanPropertyBindingResult(new Target(), "productRequest"));
 
             assertTrue(handler.handleMethodArgumentNotValidException(exception).getBody().errors().isEmpty());
+        }
+
+        /**
+         * Regression guard: a blind {@code (FieldError) error} cast in the handler
+         * throws ClassCastException on class-level constraints (plain ObjectError,
+         * no field) and would turn a 400 into a 500. Every error kind must map.
+         */
+        @Test
+        @DisplayName("Should key class-level (global) violations by object name without throwing")
+        void shouldMapGlobalObjectErrors() throws Exception {
+            var method = GlobalExceptionHandlerTest.class.getDeclaredMethod("dummyEndpoint", ProductRequest.class);
+            var bindingResult = new BeanPropertyBindingResult(new Target(), "productRequest");
+            bindingResult.addError(new ObjectError("productRequest", "Cross-field constraint violated"));
+            var exception = new MethodArgumentNotValidException(new MethodParameter(method, 0), bindingResult);
+
+            var response = handler.handleMethodArgumentNotValidException(exception);
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertEquals(Map.of("productRequest", "Cross-field constraint violated"), response.getBody().errors());
+        }
+
+        @Test
+        @DisplayName("Should serve field and global errors together in one response")
+        void shouldMapMixedErrors() throws Exception {
+            var method = GlobalExceptionHandlerTest.class.getDeclaredMethod("dummyEndpoint", ProductRequest.class);
+            var bindingResult = new BeanPropertyBindingResult(new Target(), "productRequest");
+            bindingResult.addError(new ObjectError("productRequest", "Cross-field constraint violated"));
+            bindingResult.addError(new FieldError("productRequest", "name", "name bad"));
+            var exception = new MethodArgumentNotValidException(new MethodParameter(method, 0), bindingResult);
+
+            var response = handler.handleMethodArgumentNotValidException(exception);
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertEquals(2, response.getBody().errors().size());
+            assertEquals("name bad", response.getBody().errors().get("name"));
+            assertEquals("Cross-field constraint violated", response.getBody().errors().get("productRequest"));
         }
     }
 
