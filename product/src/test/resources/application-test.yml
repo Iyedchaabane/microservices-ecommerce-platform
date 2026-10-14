@@ -1,0 +1,19 @@
+spring:
+  # Point the smoke test at an in-memory H2 database so @SpringBootTest can
+  # boot without an external PostgreSQL. PostgreSQL compatibility mode keeps
+  # identity/sequence behaviour close to production.
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      # The Flyway migrations are PostgreSQL-specific; let Hibernate build the
+      # schema from the JPA entities instead for the test profile.
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: false
+    open-in-view: false
+  flyway:
+    enabled: false
