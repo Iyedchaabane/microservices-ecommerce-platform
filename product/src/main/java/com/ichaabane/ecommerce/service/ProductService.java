@@ -6,6 +6,7 @@ import com.ichaabane.ecommerce.dto.response.PageResponse;
 import com.ichaabane.ecommerce.dto.response.ProductPurchaseResponse;
 import com.ichaabane.ecommerce.dto.response.ProductResponse;
 import com.ichaabane.ecommerce.exception.ProductPurchaseException;
+import com.ichaabane.ecommerce.exception.ResourceNotFoundException;
 import com.ichaabane.ecommerce.mapper.ProductMapper;
 import com.ichaabane.ecommerce.model.Product;
 import com.ichaabane.ecommerce.repository.CategoryRepository;
@@ -48,8 +49,10 @@ public class ProductService {
     public Integer createProduct(
             ProductRequest request
     ) {
+        // Category is mandatory for a new product (product.category_id FK); a
+        // null productId is rejected above, so findById never gets a null here.
         var category = categoryRepository.findById(request.categoryId())
-                .orElseThrow(() -> new EntityNotFoundException("Category not found with ID:: " + request.categoryId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Category", request.categoryId()));
         var product = mapper.toProduct(request, category);
         return repository.save(product).getId();
     }
@@ -57,7 +60,7 @@ public class ProductService {
     public ProductResponse findById(Integer id) {
         return repository.findById(id)
                 .map(mapper::toProductResponse)
-                .orElseThrow(() -> new ResourceNotFoundException("Product", id));
+                .orElseThrow(() -> new EntityNotFoundException("Product", id));
     }
 
     /**

@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.net.URI;
 import java.util.List;
 
 @RestController
@@ -35,7 +36,9 @@ public class ProductController {
     public ResponseEntity<Integer> createProduct(
             @RequestBody @Valid ProductRequest request
     ) {
-        return ResponseEntity.ok(service.createProduct(request));
+        Integer id = service.createProduct(request);
+        // 201 + Location for a successful creation, instead of the previous 200.
+        return ResponseEntity.created(URI.create("/api/v1/products/" + id)).body(id);
     }
 
     @PostMapping("/purchase")
