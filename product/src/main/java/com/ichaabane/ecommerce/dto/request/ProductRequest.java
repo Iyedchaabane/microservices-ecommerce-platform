@@ -14,6 +14,7 @@ public record ProductRequest(
         String description,
         @Positive(message = "Available quantity should be positive")
         double availableQuantity,
+        @NotNull(message = "Product price is required")
         @Positive(message = "Price should be positive")
         BigDecimal price,
         @NotNull(message = "Product category is required")
