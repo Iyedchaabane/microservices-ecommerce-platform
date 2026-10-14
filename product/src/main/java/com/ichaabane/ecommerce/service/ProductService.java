@@ -7,6 +7,7 @@ import com.ichaabane.ecommerce.dto.response.ProductPurchaseResponse;
 import com.ichaabane.ecommerce.dto.response.ProductResponse;
 import com.ichaabane.ecommerce.exception.ProductPurchaseException;
 import com.ichaabane.ecommerce.mapper.ProductMapper;
+import com.ichaabane.ecommerce.model.Product;
 import com.ichaabane.ecommerce.repository.CategoryRepository;
 import com.ichaabane.ecommerce.repository.ProductRepository;
 import com.ichaabane.ecommerce.repository.ProductSpecs;
@@ -18,12 +19,16 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
-import java.util.stream.Collectors;
 
+/**
+ * Catalogue, purchase and lookup behaviour for products.
+ */
 @Service
 @RequiredArgsConstructor
 public class ProductService {
@@ -105,6 +110,8 @@ public class ProductService {
         Sort primary = Sort.by(direction, field);
         return "id".equals(field) ? primary : primary.and(Sort.by(Sort.Direction.ASC, "id"));
     }
+
+    @Transactional
     public List<ProductPurchaseResponse> purchaseProducts(
             List<ProductPurchaseRequest> request
     ) {
@@ -113,17 +120,34 @@ public class ProductService {
         }
 
         // Validate here as well: this method must be safe whatever the caller validated.
-        // A zero/negative quantity would otherwise ADD stock. "!(q > 0)" also rejects NaN.
+        // A zero/negative quantity would otherwise ADD stock.
         // Duplicate product ids are merged (quantities summed), one entry per product.
-        Map<Integer, Double> requestedQuantities = new TreeMap<>();
+        // Overflow of the summed quantity is out of scope: int addition in a
+        // bounded catalogue (stock per product stays well below 2^30 units) has
+        // no realistic-usage overflow; this preserves prior behavior.
+        Map<Integer, Integer> requestedQuantities = new TreeMap<>();
         for (var item : request) {
             if (item == null || item.productId() == null) {
                 throw new ProductPurchaseException("Product is mandatory");
             }
-            if (!(item.quantity() > 0)) {
+            if (item.productId() <= 0) {
+                throw new ProductPurchaseException("Product id must be positive");
+            }
+            // quantity is a boxed Integer, so null must be rejected explicitly
+            // before the primitive comparison below (mirrors the productId null
+            // check above): otherwise null unboxes to an NPE -> 500.
+            if (item.quantity() == null) {
+                throw new ProductPurchaseException("Quantity is mandatory");
+            }
+            if (item.quantity() <= 0) {
                 throw new ProductPurchaseException("Quantity must be positive for product with ID:: " + item.productId());
             }
-            requestedQuantities.merge(item.productId(), item.quantity(), Double::sum);
+            // Math.addExact (not Integer::sum): plain int addition silently
+            // wraps on overflow, which would turn a huge merged quantity into
+            // a negative one and let the stock check pass — a silent oversell.
+            // An ArithmeticException here is a RuntimeException, so the
+            // purchase transaction rolls back.
+            requestedQuantities.merge(item.productId(), item.quantity(), Math::addExact);
         }
 
         var storedProducts = repository.findAllByIdInOrderById(new ArrayList<>(requestedQuantities.keySet()));
@@ -133,7 +157,7 @@ public class ProductService {
 
         var purchasedProducts = new ArrayList<ProductPurchaseResponse>();
         for (var product : storedProducts) {
-            double quantity = requestedQuantities.get(product.getId());
+            int quantity = requestedQuantities.get(product.getId());
             if (product.getAvailableQuantity() < quantity) {
                 throw new ProductPurchaseException("Insufficient stock quantity for product with ID:: " + product.getId());
             }
