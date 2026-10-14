@@ -132,6 +132,14 @@ Delete a customer.
 
 ## Product Service
 
+### Field semantics
+
+| Field | Type | Validation | Rationale |
+|---|---|---|---|
+| `availableQuantity` | integer | `≥ 0` (zero valid) | Whole units of stock; `0` = registered but awaiting restock. Matches `product.available_quantity INTEGER`. |
+| `price` | decimal | strictly `> 0` | No zero-priced products in this catalogue; BigDecimal/`numeric(38,2)` money. |
+| `categoryId` | integer | required | Category is a mandatory association on product creation; an unknown id is a `404`. |
+
 ### `POST /api/v1/products`
 
 Create a new product.
@@ -148,42 +156,80 @@ Create a new product.
 }
 ```
 
-**Response**: `200 OK` → `Integer` (product ID)
+**Response**: `201 Created` → `Integer` (product ID), with a `Location` header
 
 ### `GET /api/v1/products`
 
-Retrieve all products.
+Retrieve all products, paginated.
 
-**Response**: `200 OK` → `List<ProductResponse>`
+**Query Parameters**
+
+| Name | Default | Description |
+|---|---|---|
+| `page` | `0` | Zero-based page index |
+| `size` | `20` | Page size (capped at 100) |
+| `sort` | `id` | One of `id`, `name`, `price`, `availableQuantity` (whitelisted; anything else is a `400`) |
+| `order` | `asc` | `asc` or `desc` |
+
+**Response**: `200 OK` → pagination envelope
 
 ```json
-[
-  {
-    "id": 1,
-    "name": "Wireless Mouse",
-    "description": "Ergonomic wireless mouse",
-    "availableQuantity": 100,
-    "price": 25.99,
-    "category": {
+{
+  "content": [
+    {
       "id": 1,
-      "name": "Electronics",
-      "description": "Electronic devices"
+      "name": "Wireless Mouse",
+      "description": "Ergonomic wireless mouse",
+      "availableQuantity": 100,
+      "price": 25.99,
+      "categoryId": 1,
+      "categoryName": "Electronics",
+      "categoryDescription": "Electronic devices"
     }
-  }
-]
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 42,
+  "totalPages": 3,
+  "last": false
+}
 ```
+
+> Products are returned flattened (`categoryId`/`categoryName`), not as a
+> nested `category` object. A product with no category (legacy rows; nullable
+> `product.category_id` in the schema) still appears in listings with
+> `categoryId: null`.
+
+### `GET /api/v1/products/search`
+
+Filtered, paginated search. All filters optional, AND-combined.
+
+**Query Parameters**
+
+| Name | Description |
+|---|---|
+| `name` | Case-insensitive substring. `%`, `_` and `\` are matched **literally**, not as LIKE wildcards. |
+| `categoryId` | Exact category id. |
+| `priceFrom` / `priceTo` | Inclusive price bounds. |
+| `page` / `size` / `sort` / `order` | Same pagination contract as `GET /api/v1/products`. |
 
 ### `GET /api/v1/products/{id}`
 
 Retrieve a single product by ID.
 
-**Response**: `200 OK` → `ProductResponse`
+**Response**: `200 OK` → `ProductResponse` • `404 Not Found` if missing
 
 ### `POST /api/v1/products/purchase`
 
 Internal endpoint used by `order-service` to validate stock and decrement inventory.
 
 *Not intended for public consumption.*
+
+Request is a list of `{ "productId": int (> 0), "quantity": int (> 0) }`.
+Repeated product ids are merged; quantities are summed with overflow
+detection. Responses echo the (now integer) purchased quantity per product.
+Rows are locked (`SELECT ... FOR UPDATE`) in id order for the duration of the
+transaction so concurrent purchases cannot oversell.
 
 ---
 
