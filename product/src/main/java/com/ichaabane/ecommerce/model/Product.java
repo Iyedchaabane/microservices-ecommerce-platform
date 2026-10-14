@@ -1,5 +1,6 @@
 package com.ichaabane.ecommerce.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -26,7 +27,8 @@ public class Product {
     private Integer id;
     private String name;
     private String description;
-    private double availableQuantity;
+    @Column(nullable = false)
+    private int availableQuantity;
     private BigDecimal price;
     @ManyToOne
     @JoinColumn(name = "category_id")
