@@ -12,7 +12,7 @@ The platform demonstrates the following architectural patterns:
 | Service Discovery | Netflix Eureka (`discovery-service`) |
 | API Gateway | Spring Cloud Gateway (`gateway-service`) |
 | Externalized Configuration | Spring Cloud Config Server (`config-server`) |
-| Sync Inter-Service Communication | OpenFeign + Spring Cloud LoadBalancer |
+| Sync Inter-Service Communication | OpenFeign (Customer, Payment) + RestTemplate (Product) + Spring Cloud LoadBalancer |
 | Async Event-Driven Messaging | Apache Kafka (`order-topic`, `payment-topic`) |
 | Database per Service | PostgreSQL (product/order/payment) + MongoDB (customer/notification) |
 | Database Migrations | Flyway (product-service) |
@@ -61,11 +61,10 @@ flowchart LR
 
     ORDER -->|Feign| CUST
     ORDER -->|Feign| PAY
-    ORDER -->|Feign| PROD
+    ORDER -->|RestTemplate| PROD
     ORDER -->|Kafka| KAFKA
     PAY -->|Kafka| KAFKA
     KAFKA -->|Consume| NOTIF
-    PAY --> PROD
     PROD --> PG
     ORDER --> PG
     PAY --> PG
@@ -94,10 +93,13 @@ flowchart LR
 
 ### Synchronous (Feign / REST)
 
-* **Order → Customer:** validates customer existence before order creation.
-* **Order → Product:** checks stock and updates inventory before persisting an order.
-* **Order → Payment:** triggers payment processing as part of the order saga.
-* **Payment → Product:** secondary validation (defensive check on product ownership).
+* **Order → Customer:** validates customer existence before order creation via OpenFeign (`CustomerClient`).
+* **Order → Product:** checks stock and reserves inventory before persisting an order via `RestTemplate` (`ProductClient`).
+* **Order → Payment:** triggers payment processing as part of the order saga via OpenFeign (`PaymentClient`).
+
+Only `CustomerClient` and `PaymentClient` in `order-service` use OpenFeign. `ProductClient` uses Spring's `RestTemplate` configured with `application.config.product-url`.
+
+No synchronous call exists from `payment-service` to `product-service`. While `payment-service.yml` declares an `application.config.product-url` setting in Config Server, it is currently unused by the payment service codebase and does not represent an active integration.
 
 All Feign clients use **service discovery** (`lb://`) for load-balanced endpoint resolution.
 
