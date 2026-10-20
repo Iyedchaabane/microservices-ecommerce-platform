@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
+
 @RestController
 @RequestMapping("/api/v1/payments")
 @RequiredArgsConstructor
@@ -21,6 +23,10 @@ public class PaymentController {
   public ResponseEntity<Integer> createPayment(
       @RequestBody @Valid PaymentRequest request
   ) {
-    return ResponseEntity.ok(this.service.createPayment(request));
+    Integer id = service.createPayment(request);
+    // 201 + Location for a successful creation, aligning the status code with
+    // the other services; Feign callers only read the 2xx status and body, so
+    // this stays consume-compatible for order-service.
+    return ResponseEntity.created(URI.create("/api/v1/payments/" + id)).body(id);
   }
 }
