@@ -1,0 +1,24 @@
+spring:
+  # Point the context smoke test and integration tests at an in-memory H2
+  # database so @SpringBootTest can boot without the external PostgreSQL and
+  # the Config Server the service normally depends on. PostgreSQL
+  # compatibility mode keeps identity/sequence behaviour close to production.
+  datasource:
+    url: jdbc:h2:mem:paymentdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      # No Flyway in this module yet: let Hibernate build the schema from the
+      # JPA entities (including the unique constraint on order_reference) for
+      # the test profile.
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: false
+    open-in-view: false
+  kafka:
+    admin:
+      # The NewTopic bean (payment-topic) should not abort context boot when
+      # no broker is available in tests.
+      fail-fast: false
