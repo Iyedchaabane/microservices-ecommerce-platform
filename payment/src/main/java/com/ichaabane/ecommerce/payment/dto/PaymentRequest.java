@@ -15,6 +15,7 @@ public record PaymentRequest(
     @NotNull(message = "Payment method is required")
     PaymentMethod paymentMethod,
     @NotNull(message = "Order id is required")
+    @Positive(message = "Order id must be positive")
     Integer orderId,
     @NotBlank(message = "Order reference is required")
     String orderReference,
