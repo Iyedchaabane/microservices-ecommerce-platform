@@ -82,6 +82,22 @@ class PaymentRequestValidationTest {
     }
 
     @Test
+    @DisplayName("Should reject a negative order id (ids are positive)")
+    void shouldRejectNegativeOrderId() {
+        var request = new PaymentRequest(BigDecimal.TEN, PaymentMethod.VISA, -1, "REF-1",
+                new Customer("c1", "John", "Doe", "john@doe.com"));
+        assertTrue(violatedPaths(request).contains("orderId"));
+    }
+
+    @Test
+    @DisplayName("Should reject a zero order id (@Positive, mirroring the purchase request contract)")
+    void shouldRejectZeroOrderId() {
+        var request = new PaymentRequest(BigDecimal.TEN, PaymentMethod.VISA, 0, "REF-1",
+                new Customer("c1", "John", "Doe", "john@doe.com"));
+        assertTrue(violatedPaths(request).contains("orderId"));
+    }
+
+    @Test
     @DisplayName("Should reject a null order reference")
     void shouldRejectNullOrderReference() {
         var request = new PaymentRequest(BigDecimal.TEN, PaymentMethod.VISA, 1, null,
