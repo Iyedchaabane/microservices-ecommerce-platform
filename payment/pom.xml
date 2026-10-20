@@ -75,6 +75,14 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- Same convention as product-service/order-service: the context smoke
+			test and integration tests run against in-memory H2 (test profile),
+			so @SpringBootTest boots without the external PostgreSQL/Config Server. -->
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 	<dependencyManagement>
 		<dependencies>
