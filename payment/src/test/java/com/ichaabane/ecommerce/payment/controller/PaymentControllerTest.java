@@ -19,6 +19,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -50,13 +51,14 @@ class PaymentControllerTest {
     class HappyPath {
 
         @Test
-        @DisplayName("Should return 200 with the created payment id")
+        @DisplayName("Should return 201 with Location and the created payment id")
         void shouldCreatePayment() throws Exception {
             when(service.createPayment(any())).thenReturn(42);
 
             mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
-                    .andExpect(status().isOk())
+                    .andExpect(status().isCreated())
+                    .andExpect(header().string("Location", "/api/v1/payments/42"))
                     .andExpect(jsonPath("$").value(42));
 
             verify(service).createPayment(any());
