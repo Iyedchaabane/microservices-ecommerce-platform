@@ -22,7 +22,7 @@ The root `docker-compose.yml` provisions all backing services:
 * Zookeeper (host port 22181 → container 2181)
 * Kafka (port 9092) – single node, `PLAINTEXT`, replication factor 1
 * MailDev (SMTP port 1025, Web UI port 1080) – catches all outgoing mail locally
-* Zipkin is defined but **commented out** in `docker-compose.yml` (port 9411)
+* Zipkin (port 9411) – distributed tracing UI and collector (`openzipkin/zipkin`)
 
 ### Start infrastructure
 
