@@ -244,7 +244,6 @@ Create an order. Orchestrates customer validation, stock check, payment, and not
 ```json
 {
   "reference": "ORD-2026-001",
-  "amount": 125.97,
   "paymentMethod": "CREDIT_CARD",
   "customerId": "65f1a2b3c4d5e6f789012345",
   "products": [
@@ -260,6 +259,8 @@ Create an order. Orchestrates customer validation, stock check, payment, and not
 }
 ```
 
+> **Note:** The order total amount is calculated server-side from current product prices and quantities; it is not accepted in the request payload.
+
 **Response**: `200 OK` → `Integer` (order ID)
 
 **Side effects**:
@@ -271,7 +272,7 @@ Create an order. Orchestrates customer validation, stock check, payment, and not
 
 ### `GET /api/v1/orders`
 
-Retrieve all orders with their order lines.
+Retrieve all orders.
 
 **Response**: `200 OK` → `List<OrderResponse>`
 
@@ -280,17 +281,9 @@ Retrieve all orders with their order lines.
   {
     "id": 1,
     "reference": "ORD-2026-001",
-    "totalAmount": 125.97,
+    "amount": 125.97,
     "paymentMethod": "CREDIT_CARD",
-    "customerId": "65f1a2b3c4d5e6f789012345",
-    "orderLines": [
-      {
-        "id": 1,
-        "orderId": 1,
-        "productId": 1,
-        "quantity": 3
-      }
-    ]
+    "customerId": "65f1a2b3c4d5e6f789012345"
   }
 ]
 ```
@@ -326,11 +319,15 @@ Create a payment record. Called by `order-service` during checkout.
 }
 ```
 
-**Response**: `200 OK` → `Integer` (payment ID)
+**Response**: `201 Created` → `Integer` (payment ID), with a `Location` header pointing to the new resource.
 
 **Side effects**:
-- Persists payment record.
-- Publishes `PaymentNotificationRequest` to Kafka topic `payment-topic` (consumed by `notification-service` to send an email).
+- Persists payment record (the payment `order_reference` is unique: one payment per order).
+- Publishes `PaymentNotificationRequest` to Kafka topic `payment-topic` (consumed by `notification-service` to send an email) — only **after** the payment transaction commits, so a rolled-back payment never notifies the customer.
+
+> **Idempotency:** a retried checkout that reuses an already-paid `orderReference` returns the
+> existing payment ID with `201` and does not create a second payment or a duplicate event.
+> A concurrent duplicate insert is rejected with `409 Conflict`.
 
 ---
 
