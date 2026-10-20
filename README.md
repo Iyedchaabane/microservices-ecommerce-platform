@@ -354,12 +354,13 @@ services run on the host (via `start-system.sh` or Maven):
 | `zookeeper` | `zookeeper` | 22181 → 2181 | Kafka coordination |
 | `kafka` | `ms_kafka` | 9092 | Advertised listener `localhost:9092` |
 | `mail-dev` | `ms-mail-dev` | 1080 (UI) / 1025 (SMTP) | Catches all outgoing mail |
+| `zipkin` | `zipkin` | 9411 | Distributed tracing UI & collector |
 
 Images are pinned for known compatibility reasons (see comments in the file):
 `confluentinc/cp-kafka` / `cp-zookeeper` **7.6.1** (v8 is KRaft-only and crashes
 with this ZooKeeper-based config) and `mongo` **7.0** (`:latest` fails on Linux
-kernels ≥ 6.19). Zipkin is intentionally commented out — no collector runs
-today (see [Known limitations](#known-limitations)).
+kernels ≥ 6.19). Zipkin is active in `docker-compose.yml` on port 9411 (`openzipkin/zipkin`)
+and receives distributed traces exported by services via Micrometer Tracing + Brave (sampling rate 1.0).
 
 ---
 
@@ -367,7 +368,7 @@ today (see [Known limitations](#known-limitations)).
 
 | Phase | What starts | Why it must wait |
 |---|---|---|
-| 1 | Docker infrastructure (`postgres`, `mongodb`, `kafka` + `zookeeper`, `mail-dev`) | Nothing depends on it being *first*, but services are unhealthy without it |
+| 1 | Docker infrastructure (`postgres`, `mongodb`, `kafka` + `zookeeper`, `mail-dev`, `zipkin`) | Nothing depends on it being *first*, but services are unhealthy without it |
 | 2 | `config-server` (`:8888`) | Every other service imports its configuration from here |
 | 3 | `discovery` / Eureka (`:8761`) | Clients register with, and the gateway resolves, the registry |
 | 4 | `gateway`, `customer`, `product`, `payment`, `order`, `notification` (**parallel**) | Only depend on phases 2–3; inter-service calls happen at request time |
@@ -731,10 +732,6 @@ docker compose down -v                # DESTRUCTIVE: delete all data volumes
 * **No compensating transactions:** if payment fails after the stock was
   reserved in product-service, the stock is **not** restored (saga without
   compensation).
-* payment-service publishes its Kafka event **before** its transaction commits —
-  a rollback can still emit a payment-confirmation email.
-* Tracing is configured (sampling 1.0) but no collector runs (Zipkin commented
-  out in compose), so spans go nowhere.
 * `order-service` / `payment-service` manage their schema with
   `ddl-auto: update`, not Flyway (only product-service has migrations).
 * Feign/RestTemplate calls have no explicit timeouts or circuit breakers.
@@ -761,12 +758,13 @@ docker compose down -v                # DESTRUCTIVE: delete all data volumes
 4. **Resilience:** add timeouts, retries and circuit breakers
    (e.g. Resilience4j) on the Feign/RestTemplate clients.
 5. **Consistency:** add compensation for failed payments (restore stock) or an
-   outbox/saga orchestrator; apply publish-after-commit to payment events
-   (mirror `OrderService`).
+   outbox/saga orchestrator (payment and order services already apply
+   `publishAfterCommit` to safeguard post-commit notification publishing).
 6. **Edge:** terminate TLS at the gateway; do not expose MailDev, pgAdmin or
    Mongo-Express.
-7. **Observability:** run a tracing backend (Zipkin) or remove the tracing
-   config; ship logs centrally.
+7. **Observability:** run a production tracing backend (e.g. Zipkin with Elasticsearch
+   or Cassandra storage instead of the in-memory dev collector); tune sampling probability;
+   ship logs centrally.
 8. **Capacity:** set JVM/container memory limits; size Postgres/Mongo/Kafka for
    the workload.
 
