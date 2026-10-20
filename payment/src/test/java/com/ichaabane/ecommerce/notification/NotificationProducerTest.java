@@ -13,11 +13,15 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.Message;
 
 import java.math.BigDecimal;
+import java.util.concurrent.CompletableFuture;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("NotificationProducer (payment) Unit Tests")
@@ -42,6 +46,7 @@ class NotificationProducerTest {
     @DisplayName("Should publish to payment-topic with the request as payload")
     void shouldPublishToPaymentTopic() {
         var request = request();
+        when(kafkaTemplate.send(any(Message.class))).thenReturn(new CompletableFuture<>());
 
         producer.sendNotification(request);
 
@@ -55,6 +60,7 @@ class NotificationProducerTest {
     @Test
     @DisplayName("Should forward every field of the notification request")
     void shouldForwardFields() {
+        when(kafkaTemplate.send(any(Message.class))).thenReturn(new CompletableFuture<>());
         producer.sendNotification(request());
 
         @SuppressWarnings("unchecked")
@@ -62,5 +68,24 @@ class NotificationProducerTest {
         verify(kafkaTemplate).send(captor.capture());
         assertEquals("REF-1", captor.getValue().getPayload().orderReference());
         assertEquals("john@doe.com", captor.getValue().getPayload().customerEmail());
+    }
+
+    @Test
+    @DisplayName("Should not throw when the async delivery later fails (the future is completed exceptionally)")
+    void shouldNotThrowOnAsyncDeliveryFailure() {
+        // The failed future's whenComplete callback runs synchronously on
+        // completeExceptionally, so this drives the error-logging branch.
+        CompletableFuture<?> failed = new CompletableFuture<>();
+        failed.completeExceptionally(new RuntimeException("broker down"));
+        when(kafkaTemplate.send(any(Message.class))).thenReturn(CompletableFuture.class.cast(failed));
+
+        // The failure is already committed at the payment-service level; the
+        // producer must stay silent (log only) rather than throw.
+        assertDoesNotThrow(() -> producer.sendNotification(request()));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Message<PaymentNotificationRequest>> captor = ArgumentCaptor.forClass(Message.class);
+        verify(kafkaTemplate).send(captor.capture());
+        assertEquals("REF-1", captor.getValue().getPayload().orderReference());
     }
 }
