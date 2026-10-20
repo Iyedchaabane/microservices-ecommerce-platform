@@ -41,6 +41,12 @@ public class Payment {
 
   private Integer orderId;
 
+  // Unique: one payment per order reference. payment-service commits before the
+  // order-side checkout finishes, so order-service retries with the same
+  // reference must not record a second payment. The service checks first and
+  // this constraint backstops concurrent inserts; a violation surfaces as 409
+  // through GlobalExceptionHandler.
+  @Column(unique = true)
   private String orderReference;
 
   @CreatedDate
