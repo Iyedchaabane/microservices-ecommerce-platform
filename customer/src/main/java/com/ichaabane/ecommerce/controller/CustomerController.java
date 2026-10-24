@@ -8,6 +8,7 @@ import com.ichaabane.ecommerce.dto.response.CustomerResponse;
 import com.ichaabane.ecommerce.service.CustomerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/customers")
 @RequiredArgsConstructor
+@Slf4j
 public class CustomerController {
 
   private static final int DEFAULT_PAGE_SIZE = 10;
@@ -35,7 +37,9 @@ public class CustomerController {
   public ResponseEntity<String> createCustomer(
       @RequestBody @Valid CustomerCreateRequest request
   ) {
+    log.info("REST request to create customer");
     var customerId = this.service.createCustomer(request);
+    log.info("REST response: customer created with id={}", customerId);
     return ResponseEntity
         .created(URI.create("/api/v1/customers/" + customerId))
         .body(customerId);
@@ -46,6 +50,7 @@ public class CustomerController {
       @PathVariable("customer-id") String customerId,
       @RequestBody @Valid CustomerUpdateRequest request
   ) {
+    log.info("REST request to update customer id={}", customerId);
     this.service.updateCustomer(customerId, request);
     return ResponseEntity.accepted().build();
   }
@@ -55,6 +60,7 @@ public class CustomerController {
       @RequestParam(name = "page", defaultValue = "0") int page,
       @RequestParam(name = "size", defaultValue = "10") int size
   ) {
+    log.debug("REST request to list customers: page={}, size={}", page, size);
     Pageable pageable = PageRequest.of(Math.max(page, 0), normalizeSize(size));
     return ResponseEntity.ok(this.service.findAllCustomers(pageable));
   }
@@ -63,6 +69,7 @@ public class CustomerController {
   public ResponseEntity<Boolean> existsById(
       @PathVariable("customer-id") String customerId
   ) {
+    log.debug("REST request to check existence of customer id={}", customerId);
     return ResponseEntity.ok(this.service.existsById(customerId));
   }
 
@@ -70,6 +77,7 @@ public class CustomerController {
   public ResponseEntity<CustomerResponse> findById(
       @PathVariable("customer-id") String customerId
   ) {
+    log.debug("REST request to get customer id={}", customerId);
     return ResponseEntity.ok(this.service.findById(customerId));
   }
 
@@ -77,9 +85,11 @@ public class CustomerController {
   public ResponseEntity<Void> delete(
       @PathVariable("customer-id") String customerId
   ) {
+    log.info("REST request to delete customer id={}", customerId);
     this.service.deleteCustomer(customerId);
     return ResponseEntity.noContent().build();
   }
+
 
   private static int normalizeSize(int size) {
     if (size < 1) {

@@ -9,6 +9,7 @@ import com.ichaabane.ecommerce.mapper.CustomerMapper;
 import com.ichaabane.ecommerce.model.Customer;
 import com.ichaabane.ecommerce.repository.CustomerRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +20,7 @@ import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CustomerService {
 
   private final CustomerRepository repository;
@@ -34,10 +36,12 @@ public class CustomerService {
     customer.setId(null);
     assertEmailIsAvailable(customer.getEmail(), null);
     try {
-      return this.repository.save(customer).getId();
+      var id = this.repository.save(customer).getId();
+      return id;
     } catch (DuplicateKeyException e) {
       // The MongoDB unique index on email is the final guarantee: a concurrent
       // request may have inserted the same email after our pre-check.
+      log.warn("Concurrent duplicate email detected during customer creation");
       throw new CustomerEmailAlreadyExistsException(
           "Customer with email " + customer.getEmail() + " already exists");
     }
@@ -59,6 +63,7 @@ public class CustomerService {
       this.repository.save(customer);
     } catch (DuplicateKeyException e) {
       // Same race as on create: the unique index decides, we translate the failure.
+      log.warn("Concurrent duplicate email detected during update of customer id={}", customerId);
       throw new CustomerEmailAlreadyExistsException(
           "Customer with email " + customer.getEmail() + " already exists");
     }
@@ -115,9 +120,13 @@ public class CustomerService {
   }
 
   public CustomerResponse findById(String id) {
+    log.debug("Fetching customer id={}", id);
     return this.repository.findById(id)
         .map(mapper::fromCustomer)
-        .orElseThrow(() -> new CustomerNotFoundException(String.format("No customer found with the provided ID: %s", id)));
+        .orElseThrow(() -> {
+          log.warn("Customer id={} not found", id);
+          return new CustomerNotFoundException(String.format("No customer found with the provided ID: %s", id));
+        });
   }
 
   public boolean existsById(String id) {
@@ -125,11 +134,14 @@ public class CustomerService {
   }
 
   public void deleteCustomer(String id) {
+    log.info("Deleting customer id={}", id);
     // deleteById is a silent no-op for a missing document; check existence first
     // so clients get a predictable 404 instead of a fake success.
     if (!this.repository.existsById(id)) {
+      log.warn("Customer id={} not found for deletion", id);
       throw new CustomerNotFoundException(String.format("No customer found with the provided ID: %s", id));
     }
     this.repository.deleteById(id);
+    log.info("Customer id={} deleted successfully", id);
   }
 }
