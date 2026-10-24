@@ -25,3 +25,12 @@ application.config.payment-url: http://localhost:8089/api/v1/payments
 
 # Kafka (optionnel ou mock)
 spring.kafka.producer.bootstrap-servers: localhost:9092
+# The config server normally supplies these (configurations/order-service.yml);
+# tests never fetch remote configuration, so replicate the JSON producer setup
+# here — without it the template falls back to Boot's default StringSerializer
+# and every OrderConfirmation send fails with a SerializationException.
+spring.kafka.producer:
+  key-serializer: org.apache.kafka.common.serialization.StringSerializer
+  value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  properties:
+    spring.json.type.mapping: orderConfirmation:com.ichaabane.ecommerce.kafka.OrderConfirmation
