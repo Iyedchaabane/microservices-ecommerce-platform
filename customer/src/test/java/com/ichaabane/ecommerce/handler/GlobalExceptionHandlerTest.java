@@ -1,11 +1,17 @@
 package com.ichaabane.ecommerce.handler;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.ichaabane.ecommerce.dto.request.CustomerCreateRequest;
 import com.ichaabane.ecommerce.exception.CustomerEmailAlreadyExistsException;
 import com.ichaabane.ecommerce.exception.CustomerNotFoundException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.MethodParameter;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
@@ -92,6 +98,21 @@ class GlobalExceptionHandlerTest {
             assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
             assertEquals("Customer with email john@doe.com already exists", response.getBody());
         }
+
+        @Test
+        @DisplayName("Should not write the raw customer email into logs")
+        void shouldNotLogRawEmail() {
+            withCapturedLogs(
+                    () -> handler.handle(new CustomerEmailAlreadyExistsException(
+                            "Customer with email john.doe@example.com already exists")),
+                    events -> {
+                        assertEquals(1, events.size());
+                        String logged = events.get(0).getFormattedMessage();
+                        assertTrue(!logged.contains("john.doe@example.com"),
+                                "customer email must never appear in logs: " + logged);
+                        assertTrue(logged.contains("email conflict"), "the log must remain actionable: " + logged);
+                    });
+        }
     }
 
     @Nested
@@ -116,6 +137,21 @@ class GlobalExceptionHandlerTest {
 
             assertTrue(!response.getBody().contains("E11000"));
             assertTrue(!response.getBody().contains("customer.customer"));
+        }
+
+        @Test
+        @DisplayName("Should NEVER log the raw customer email on duplicate-key (Mongo embeds the value)")
+        void shouldNotLogRawEmailOnDuplicateKey() {
+            var raw = "E11000 duplicate key error collection: customer.customer "
+                    + "index: email dup key: { email: \"john.doe@example.com\" }";
+
+            withCapturedLogs(() -> handler.handleDuplicateKey(new DuplicateKeyException(raw)), events -> {
+                assertEquals(1, events.size());
+                String logged = events.get(0).getFormattedMessage();
+                assertTrue(!logged.contains("john.doe@example.com"), "customer email must never appear in logs: " + logged);
+                assertTrue(!logged.contains("E11000"), "Mongo internals must not be logged: " + logged);
+                assertTrue(logged.contains("Duplicate key"), "the log must remain actionable: " + logged);
+            });
         }
     }
 
@@ -162,6 +198,28 @@ class GlobalExceptionHandlerTest {
 
             assertTrue(response.getBody().errors().isEmpty());
         }
+    }
+
+    /** Capture helpers for the PII redaction assertions. */
+    private ListAppender<ILoggingEvent> logEvents;
+    private Logger handlerLogger;
+
+    @BeforeEach
+    void attachLogCapture() {
+        handlerLogger = (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        logEvents = new ListAppender<>();
+        logEvents.start();
+        handlerLogger.addAppender(logEvents);
+    }
+
+    @AfterEach
+    void detachLogCapture() {
+        handlerLogger.detachAndStopAllAppenders();
+    }
+
+    private void withCapturedLogs(Runnable action, java.util.function.Consumer<java.util.List<ILoggingEvent>> assertions) {
+        action.run();
+        assertions.accept(logEvents.list);
     }
 
     @Nested
