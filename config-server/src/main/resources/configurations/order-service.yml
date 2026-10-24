@@ -21,6 +21,8 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
         spring.json.type.mapping: orderConfirmation:com.ichaabane.ecommerce.kafka.OrderConfirmation
+    template:
+      observation-enabled: true
 
 application:
   config:

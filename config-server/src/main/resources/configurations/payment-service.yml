@@ -22,6 +22,8 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
         spring.json.type.mapping: paymentConfirmation:com.ichaabane.ecommerce.notification.PaymentNotificationRequest
+    template:
+      observation-enabled: true
 application:
   config:
     product-url: http://localhost:8222/api/v1/products

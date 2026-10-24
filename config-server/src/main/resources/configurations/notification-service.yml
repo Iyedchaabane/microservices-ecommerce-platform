@@ -21,6 +21,8 @@ spring:
         # from broker payloads (deserialization / gadget-chain risk).
         spring.json.trusted.packages: com.ichaabane.ecommerce.kafka.order,com.ichaabane.ecommerce.kafka.payment
         spring.json.type.mapping: orderConfirmation:com.ichaabane.ecommerce.kafka.order.OrderConfirmation,paymentConfirmation:com.ichaabane.ecommerce.kafka.payment.PaymentConfirmation
+    listener:
+      observation-enabled: true
   mail:
     host: ${MAIL_HOST:localhost}
     port: 1025
