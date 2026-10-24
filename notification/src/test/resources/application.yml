@@ -1,0 +1,48 @@
+# Test-only configuration for the notification module (audit test-execution
+# report: contextLoads previously failed because spring-mail was on the
+# classpath but spring.mail.host was never set outside the config server, so
+# MailSenderAutoConfiguration backed off and EmailService had no
+# JavaMailSender). Local SMTP coordinates only; no credentials.
+#
+# NOTE: src/test/resources/application.yml SHADOWS the main
+# src/main/resources/application.yml, so the properties the main file carries
+# (application name, config-server import) are repeated here.
+spring:
+  application:
+    name: notification-service
+  config:
+    import: optional:configserver:http://localhost:8888
+  cloud:
+    config:
+      username: ${CONFIG_SERVER_USERNAME:}
+      password: ${CONFIG_SERVER_PASSWORD:}
+      # Deterministic tests: never fetch remote configuration.
+      enabled: false
+  mail:
+    host: localhost
+    port: 1025
+    username: ${MAIL_USER:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          trust: "*"
+        auth: true
+        starttls:
+          enabled: true
+        connectiontimeout: 5000
+        timeout: 3000
+        writetimeout: 5000
+  kafka:
+    bootstrap-servers: localhost:9092
+    admin:
+      # The NewTopic beans must not abort context boot when no broker runs.
+      fail-fast: false
+  data:
+    mongodb:
+      # Auto-configured but never contacted in the smoke test (initialised lazily).
+      auto-index-creation: false
+
+application:
+  mail:
+    from: dev-mail@localhost
