@@ -13,6 +13,7 @@ import com.ichaabane.ecommerce.repository.CategoryRepository;
 import com.ichaabane.ecommerce.repository.ProductRepository;
 import com.ichaabane.ecommerce.repository.ProductSpecs;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -32,6 +33,7 @@ import java.util.TreeMap;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ProductService {
 
     /** Sort fields a client may request — anything else is rejected (whitelist). */
@@ -58,9 +60,13 @@ public class ProductService {
     }
 
     public ProductResponse findById(Integer id) {
+        log.debug("Fetching product id={}", id);
         return repository.findById(id)
                 .map(mapper::toProductResponse)
-                .orElseThrow(() -> new EntityNotFoundException("Product", id));
+                .orElseThrow(() -> {
+                    log.warn("Product id={} not found", id);
+                    return new ResourceNotFoundException("Product", id);
+                });
     }
 
     /**
