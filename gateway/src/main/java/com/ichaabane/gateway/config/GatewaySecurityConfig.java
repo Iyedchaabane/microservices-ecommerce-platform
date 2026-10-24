@@ -8,6 +8,12 @@ import org.springframework.security.config.annotation.web.reactive.EnableWebFlux
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.web.server.ServerAuthenticationEntryPoint;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -38,6 +44,8 @@ import java.util.List;
 @EnableWebFluxSecurity
 public class GatewaySecurityConfig {
 
+  private static final Logger log = LoggerFactory.getLogger(GatewaySecurityConfig.class);
+
   /** Per-client-IP rate limiting on business routes (see RateLimitWebFilter). */
   @Bean
   public RateLimitWebFilter rateLimitWebFilter(
@@ -67,8 +75,25 @@ public class GatewaySecurityConfig {
 
   @Bean
   public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
+    ServerAuthenticationEntryPoint authenticationEntryPoint = (exchange, ex) -> {
+      log.warn("Authentication failed for {} {}: {}",
+          exchange.getRequest().getMethod(), exchange.getRequest().getPath(), ex.getMessage());
+      exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+      exchange.getResponse().getHeaders().set(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+      return exchange.getResponse().setComplete();
+    };
+
     http
         .csrf(ServerHttpSecurity.CsrfSpec::disable)
+        .exceptionHandling(exceptions -> exceptions
+            .authenticationEntryPoint(authenticationEntryPoint)
+            .accessDeniedHandler((exchange, ex) -> {
+              log.warn("Access denied for {} {}: {}",
+                  exchange.getRequest().getMethod(), exchange.getRequest().getPath(), ex.getMessage());
+              exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+              return exchange.getResponse().setComplete();
+            })
+        )
         .authorizeExchange(exchange -> exchange
             .pathMatchers("/eureka/**")
             .permitAll()
@@ -77,7 +102,10 @@ public class GatewaySecurityConfig {
             .anyExchange()
             .authenticated()
         )
-        .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
+        .oauth2ResourceServer(oauth2 -> oauth2
+            .jwt(Customizer.withDefaults())
+            .authenticationEntryPoint(authenticationEntryPoint)
+        );
     return http.build();
   }
 }

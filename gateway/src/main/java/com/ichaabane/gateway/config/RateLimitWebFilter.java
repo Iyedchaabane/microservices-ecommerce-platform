@@ -63,6 +63,8 @@ public class RateLimitWebFilter implements WebFilter, Ordered, DisposableBean {
         return ORDER;
     }
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(RateLimitWebFilter.class);
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String path = exchange.getRequest().getPath().value();
@@ -75,6 +77,8 @@ public class RateLimitWebFilter implements WebFilter, Ordered, DisposableBean {
         if (limiter.tryAcquire(clientKey) > 0) {
             return chain.filter(exchange);
         }
+
+        log.warn("Rate limit exceeded for clientKey='{}' on path='{}'", clientKey, path);
 
         ServerHttpResponse response = exchange.getResponse();
         if (response.isCommitted()) {
@@ -97,6 +101,7 @@ public class RateLimitWebFilter implements WebFilter, Ordered, DisposableBean {
     /** Releases the limiter's background janitor thread. */
     @Override
     public void destroy() {
+        log.info("RateLimitWebFilter is shutting down");
         limiter.close();
     }
 }
