@@ -17,6 +17,7 @@ import com.ichaabane.ecommerce.product.PurchaseRequest;
 import com.ichaabane.ecommerce.product.PurchaseResponse;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderService {
 
     private final OrderRepository repository;
@@ -40,21 +42,29 @@ public class OrderService {
 
     @Transactional
     public Integer createOrder(OrderRequest request) {
+        log.info("Starting order creation for reference='{}', customerId='{}'", request.reference(), request.customerId());
         var customer = this.customerClient.findCustomerById(request.customerId())
-                .orElseThrow(() -> new BusinessException("Cannot create order:: No customer exists with the provided ID"));
+                .orElseThrow(() -> {
+                    log.warn("Order creation rejected: no customer found with id='{}'", request.customerId());
+                    return new BusinessException("Cannot create order:: No customer exists with the provided ID");
+                });
 
         // Fail BEFORE the stock is decremented in the product service.
         if (repository.existsByReference(request.reference())) {
+            log.warn("Order creation rejected: order with reference='{}' already exists", request.reference());
             throw new BusinessException("Cannot create order:: an order with this reference already exists");
         }
 
+        log.info("Requesting purchase of {} product item(s) for order reference='{}'", request.products().size(), request.reference());
         var purchasedProducts = productClient.purchaseProducts(request.products());
 
         // The amount is computed server-side from the product prices: never trust the client.
         var totalAmount = computeTotalAmount(purchasedProducts);
+        log.info("Calculated order total amount: {} for reference='{}'", totalAmount, request.reference());
 
         // saveAndFlush: constraint violations surface now, before the payment is requested.
         var order = this.repository.saveAndFlush(mapper.toOrder(request, totalAmount));
+        log.info("Order entity persisted with id={}, reference='{}'", order.getId(), order.getReference());
 
         for (PurchaseRequest purchaseRequest : request.products()) {
             orderLineService.saveOrderLine(
@@ -72,6 +82,7 @@ public class OrderService {
                 order.getReference(),
                 customer
         );
+        log.info("Requesting payment for order id={}, reference='{}'", order.getId(), order.getReference());
         paymentClient.requestOrderPayment(paymentRequest);
 
         publishAfterCommit(
@@ -84,6 +95,7 @@ public class OrderService {
                 )
         );
 
+        log.info("Order creation flow completed successfully for order id={}, reference='{}'", order.getId(), order.getReference());
         return order.getId();
     }
 
@@ -95,9 +107,13 @@ public class OrderService {
     }
 
     public OrderResponse findById(Integer id) {
+        log.debug("Fetching order id={}", id);
         return this.repository.findById(id)
                 .map(this.mapper::fromOrder)
-                .orElseThrow(() -> new EntityNotFoundException(String.format("No order found with the provided ID: %d", id)));
+                .orElseThrow(() -> {
+                    log.warn("Order id={} not found", id);
+                    return new EntityNotFoundException(String.format("No order found with the provided ID: %d", id));
+                });
     }
 
     private BigDecimal computeTotalAmount(List<PurchaseResponse> purchasedProducts) {
