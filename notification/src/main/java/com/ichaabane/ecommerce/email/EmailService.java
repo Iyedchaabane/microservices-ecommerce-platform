@@ -82,14 +82,19 @@ public class EmailService {
         Context context = new Context();
         context.setVariables(variables);
 
+        Object orderReference = variables.get("orderReference");
         try {
             String htmlTemplate = templateEngine.process(template.getTemplate(), context);
             messageHelper.setText(htmlTemplate, true);
             messageHelper.setTo(destinationEmail);
             mailSender.send(mimeMessage);
-            log.info("Email successfully sent to {} with template {}", destinationEmail, template.getTemplate());
+            log.info("Email successfully sent for orderReference='{}' with template {}", orderReference, template.getTemplate());
         } catch (MessagingException e) {
-            log.warn("Cannot send Email to {}: {}", destinationEmail, e.getMessage());
+            // The notification record is already persisted: rethrowing here would still fail
+            // the Kafka listener (duplicated persist on redelivery), so the failure stays
+            // swallowed — but it is logged with the full stack trace for actionable context.
+            log.warn("Failed to send email for orderReference='{}' with template {} — customer is not notified by email",
+                    orderReference, template.getTemplate(), e);
         }
     }
 }
