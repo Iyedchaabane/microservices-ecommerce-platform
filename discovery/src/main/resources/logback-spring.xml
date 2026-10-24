@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Structured logging configuration for discovery.
+  
+  Pattern includes: timestamp | level | service name | traceId | spanId | correlationId | thread | logger | message
+  
+  Environment overrides:
+    LOG_LEVEL_ROOT     - root level (default: INFO)
+    LOG_LEVEL_APP      - com.ichaabane level (default: INFO)
+    LOG_LEVEL_SQL      - Hibernate SQL (default: WARN)
+    LOG_LEVEL_SQL_BIND - Hibernate bind params (default: WARN)
+  
+  Profiles:
+    json-logging       - switches to JSON encoder for log aggregation
+-->
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+  <springProperty scope="context" name="SERVICE_NAME"
+                  source="spring.application.name" defaultValue="discovery"/>
+
+  <!-- ==================== Console appender ==================== -->
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p ${SERVICE_NAME} [%X{traceId:-}] [%X{spanId:-}] [corr=%X{correlationId:-}] --- [%15.15t] %-40.40logger{39} : %replace(%m){'[\r\n]', ' '}%n%wEx</pattern>
+      <charset>UTF-8</charset>
+    </encoder>
+  </appender>
+
+  <!-- ==================== JSON appender (production) ==================== -->
+  <springProfile name="json-logging">
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder class="ch.qos.logback.classic.encoder.JsonEncoder"/>
+    </appender>
+  </springProfile>
+
+  <!-- ==================== Logger levels ==================== -->
+  <logger name="com.ichaabane" level="${LOG_LEVEL_APP:-INFO}"/>
+
+  <!-- Suppress noisy framework loggers -->
+  <logger name="org.apache.kafka" level="WARN"/>
+  <logger name="org.springframework.kafka" level="WARN"/>
+  <logger name="org.springframework.data.mongodb" level="WARN"/>
+  <logger name="org.springframework.web" level="WARN"/>
+  <logger name="org.springframework.security" level="WARN"/>
+  <logger name="io.netty" level="WARN"/>
+
+
+  <!-- ==================== Root ==================== -->
+  <root level="${LOG_LEVEL_ROOT:-INFO}">
+    <springProfile name="json-logging">
+      <appender-ref ref="JSON_CONSOLE"/>
+    </springProfile>
+    <springProfile name="!json-logging">
+      <appender-ref ref="CONSOLE"/>
+    </springProfile>
+  </root>
+
+</configuration>
